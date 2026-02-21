@@ -803,7 +803,7 @@ void tTVPApplication::Run() {
 		if (SDL_WasInit(SDL_INIT_EVENTS) != 0)
 		{
 #ifndef __EMSCRIPTEN__
-			SDL_WaitEvent(NULL);
+			SDL_WaitEventTimeout(NULL, 16);
 #endif
 		}
 	}

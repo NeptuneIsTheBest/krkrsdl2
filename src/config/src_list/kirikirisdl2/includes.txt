@@ -30,6 +30,9 @@ external/krkrz/external/opus/celt
 external/krkrz/external/opus/include
 external/krkrz/external/opusfile/include
 external/krkrz/external/opusfile/src
+external/krkrz/external/stb_vorbis
+external/krkrz/external/minimp3
+external/krkrz/external/dr_flac
 external/krkrz/external/jxrlib
 external/krkrz/external/jxrlib/common/include
 external/krkrz/external/jxrlib/image/sys
