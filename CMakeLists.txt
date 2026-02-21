@@ -165,6 +165,13 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Emscripten")
 list(APPEND KRKRSDL2COMMON_SRC src/plugins/kremscripten.cpp)
 endif()
 
+if(APPLE AND NOT IOS)
+list(REMOVE_ITEM KRKRSDL2COMMON_SRC src/core/base/sdl2/FileSelector.cpp)
+list(APPEND KRKRSDL2COMMON_SRC src/core/base/sdl2/FileSelector.mm)
+set_source_files_properties(src/core/base/sdl2/FileSelector.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc" SKIP_PRECOMPILE_HEADERS ON)
+list(APPEND KRKRSDL2_LIBS "-framework AppKit")
+endif()
+
 list(APPEND KRKRSDL2_DEFINITIONS
 	TVP_COMPILING_KRKRSDL2
 	TVP_OPUS_DECODER_IMPLEMENT
