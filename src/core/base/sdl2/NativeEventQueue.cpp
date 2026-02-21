@@ -97,15 +97,10 @@ void NativeEventQueueImplement::PostEvent(const NativeEvent& ev) {
 		event.user.code = 0;
 		event.user.data2 = (void *)tmp_ev;
 		tmp_ev->SetQueue(this);
-		int res = 0;
-		while (true)
+		int res = SDL_PushEvent(&event);
+		if (res != 1)
 		{
-			res = SDL_PushEvent(&event);
-			if (res == 1)
-			{
-				break;
-			}
-			SDL_Delay(100);
+			delete tmp_ev;
 		}
 	}
 }
