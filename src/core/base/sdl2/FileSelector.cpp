@@ -14,10 +14,11 @@
 // TVPSelectFile related
 // OS固有のファイル選択ダイアログを表示する
 //---------------------------------------------------------------------------
+#ifndef KRKRSDL2_USE_MACOS_FILE_SELECTOR
 bool TVPSelectFile(iTJSDispatch2 *params)
 {
 	return false;
 }
+#endif
 //---------------------------------------------------------------------------
-
 

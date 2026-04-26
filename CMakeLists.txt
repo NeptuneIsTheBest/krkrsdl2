@@ -116,8 +116,19 @@ set(IOS_RESOURCES_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/src/resources/ios CACHE FILEP
 endif()
 
 if(APPLE AND NOT IOS)
+enable_language(OBJCXX)
 set(MACOS_RESOURCES_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/src/resources/macos CACHE FILEPATH "The path to the resources for macOS.")
 add_compile_options(-Wno-declaration-after-statement)
+find_library(APPKIT_LIBRARY AppKit)
+if(NOT APPKIT_LIBRARY)
+message(FATAL_ERROR "AppKit framework not found")
+endif()
+list(APPEND KRKRSDL2_DEFINITIONS
+	KRKRSDL2_USE_MACOS_FILE_SELECTOR
+)
+list(APPEND KRKRSDL2_LIBS
+	${APPKIT_LIBRARY}
+)
 endif()
 
 if(VITA)
@@ -160,6 +171,12 @@ list(FILTER KRKRSDL2OPUS_SRC INCLUDE REGEX "^external/krkrz/external/opus")
 set_source_files_properties(${KRKRSDL2OPUS_SRC} PROPERTIES INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/external/krkrz/external/opus/silk;${CMAKE_CURRENT_SOURCE_DIR}/external/krkrz/external/opus/silk/fixed;${CMAKE_CURRENT_SOURCE_DIR}/external/krkrz/external/opus/silk/float")
 
 list(APPEND KRKRSDL2COMMON_SRC src/support/roundevenf.c)
+
+if(APPLE AND NOT IOS)
+list(APPEND KRKRSDL2COMMON_SRC
+	src/core/base/sdl2/FileSelectorMac.mm
+)
+endif()
 
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Emscripten")
 list(APPEND KRKRSDL2COMMON_SRC src/plugins/kremscripten.cpp)
@@ -582,10 +599,16 @@ set_target_properties(${KRKRSDL2COMMON_NAME} PROPERTIES POSITION_INDEPENDENT_COD
 endif()
 set_target_properties(${KRKRSDL2COMMON_NAME} PROPERTIES C_STANDARD 11)
 set_target_properties(${KRKRSDL2COMMON_NAME} PROPERTIES CXX_STANDARD 14)
+if(APPLE AND NOT IOS)
+set_target_properties(${KRKRSDL2COMMON_NAME} PROPERTIES OBJCXX_STANDARD 14)
+endif()
 target_sources(${KRKRSDL2COMMON_NAME} PRIVATE ${KRKRSDL2COMMON_SRC})
 target_compile_definitions(${KRKRSDL2COMMON_NAME} PUBLIC ${KRKRSDL2_DEFINITIONS})
 target_compile_options(${KRKRSDL2COMMON_NAME} PUBLIC $<$<COMPILE_LANGUAGE:C>:${KRKRSDL2_CFLAGS}>)
 target_compile_options(${KRKRSDL2COMMON_NAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${KRKRSDL2_CXXFLAGS}>)
+if(APPLE AND NOT IOS)
+target_compile_options(${KRKRSDL2COMMON_NAME} PUBLIC $<$<COMPILE_LANGUAGE:OBJCXX>:${KRKRSDL2_CXXFLAGS}>)
+endif()
 target_include_directories(${KRKRSDL2COMMON_NAME} PUBLIC ${KRKRSDL2COMMON_INCLUDES})
 if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.13.0")
 target_link_options(${KRKRSDL2COMMON_NAME} PUBLIC ${KRKRSDL2_LDFLAGS})
