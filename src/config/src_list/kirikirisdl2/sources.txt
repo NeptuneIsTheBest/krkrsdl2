@@ -11,6 +11,7 @@ external/krkrz/base/UtilStreams.cpp
 external/krkrz/base/XP3Archive.cpp
 external/krkrz/extension/Extension.cpp
 external/krkrz/msg/MsgIntf.cpp
+external/krkrz/sound/CompressedAudioDecoder.cpp
 external/krkrz/sound/MathAlgorithms.cpp
 external/krkrz/sound/OpusCodecDecoder.cpp
 external/krkrz/sound/PhaseVocoderDSP.cpp
