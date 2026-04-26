@@ -159,6 +159,7 @@ class FAudioStream : public iTVPAudioStream
 	tjs_int AudioBalanceValue;
 
 	FAudioVoiceCallbackWithUserdata CallbackParam;
+	tTJSCriticalSection CallbackCS;
 
 	StreamQueueCallback QueueCallback;
 	void* UserData;
@@ -242,6 +243,12 @@ public:
 
 	virtual ~FAudioStream() override
 	{
+		{
+			tTJSCriticalSectionHolder holder(CallbackCS);
+			QueueCallback = nullptr;
+			UserData = nullptr;
+			CallbackParam.userdata = nullptr;
+		}
 		if (SourceVoiceObj != nullptr)
 		{
 			FAudioVoice_DestroyVoice(SourceVoiceObj);
@@ -256,8 +263,10 @@ public:
 
 	virtual void SetCallback(StreamQueueCallback callback, void* user) override
 	{
+		tTJSCriticalSectionHolder holder(CallbackCS);
 		QueueCallback = callback;
 		UserData = user;
+		CallbackParam.userdata = (void *)this;
 	}
 
 	virtual void Enqueue(void *data, size_t size, bool last) override
@@ -430,6 +439,7 @@ public:
 
 	virtual void OnBufferEnd(void *pBufferContext)
 	{
+		tTJSCriticalSectionHolder holder(CallbackCS);
 		if (QueueCallback == nullptr)
 		{
 			return;
