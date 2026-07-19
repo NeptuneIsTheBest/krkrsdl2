@@ -12,3 +12,4 @@ build
 .externalNativeBuild
 .gradle
 android-project/app/.cxx/
+.idea
