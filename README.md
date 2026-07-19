@@ -1,25 +1,71 @@
 # 吉里吉里SDL2 / Kirikiri SDL2
 
-吉里吉里SDL2は、macOSやLinuxなど、[SDL2](https://www.libsdl.org/)をサポートするプラットフォームで実行できる[吉里吉里Z](https://krkrz.github.io/)の移植版です。  
+吉里吉里SDL2は、[吉里吉里Z](https://krkrz.github.io/)をSDL2上へ移植したプロジェクトです。現在サポートする実行環境は、Apple Siliconを搭載したMac上のmacOS 13 Ventura以降だけです。
 
-詳細については、次の Web ページを参照してください: https://krkrsdl2.github.io/krkrsdl2/  
+Kirikiri SDL2 is a port of [Kirikiri Z](https://krkrz.github.io/) to SDL2. The only supported target is macOS 13 Ventura or later on an Apple Silicon Mac.
 
-Kirikiri SDL2 is a port of [Kirikiri Z](https://krkrz.github.io/) that can be run on platforms supporting [SDL2](https://www.libsdl.org/), such as macOS and Linux.  
+詳細 / More information: https://krkrsdl2.github.io/krkrsdl2/
 
-Please visit the following webpage for more information: https://krkrsdl2.github.io/krkrsdl2/en/  
+## サポート対象 / Supported target
+
+- macOS 13.0 or later
+- Apple Silicon (`arm64`) only
+- Command-line executable and macOS application bundle
+- External plugins built with the generated `tp_stub`
+
+Intel Macs, Universal binaries, iOS, and non-macOS operating systems are not supported. CMake rejects unsupported hosts, SDKs, architectures, and deployment targets during configuration.
+
+## ビルド / Build
+
+Xcode Command Line Tools and CMake are required. Initialize all submodules before configuring:
+
+```sh
+git submodule update --init --recursive
+```
+
+Build the command-line executable:
+
+```sh
+cmake -S . -B build-cli \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DOPTION_BUILD_MACOS_BUNDLE=OFF
+cmake --build build-cli --parallel
+```
+
+Build the application bundle, optionally embedding a game data file or directory:
+
+```sh
+cmake -S . -B build-app \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DOPTION_BUILD_MACOS_BUNDLE=ON \
+  -DEMBED_DATA_PATH=/absolute/path/to/game-data
+cmake --build build-app --parallel
+```
+
+The build defaults to `arm64` and a macOS 13.0 deployment target.
+
+## プラグインスタブ / Plugin stub
+
+Python 3 is required to regenerate the external-plugin stub:
+
+```sh
+mkdir -p build-tp-stub
+python3 src/core/base/sdl2/makestub.py build-tp-stub
+cp src/config/tp_stub_template.cmake build-tp-stub/CMakeLists.txt
+cmake -S build-tp-stub -B build-tp-stub/build
+cmake --build build-tp-stub/build --parallel
+```
+
+The resulting `libtp_stub.a` targets macOS 13 or later on `arm64`.
 
 ## 商用ゲームの実行に関する注意 / A note on running commercial games
 
-このプロジェクトを使用して変更されていない商用ゲームを実行することはサポートされていません。  
-代わりに[Wine](https://www.winehq.org/)または[Kirikiroid2](https://play.google.com/store/apps/details?id=org.tvp.kirikiri2)を使用してください。    
+このプロジェクトを使用して変更されていない商用ゲームを実行することはサポートされていません。
 
-Running unmodified commercial games using this project is not supported.  
-Please use [Wine](https://www.winehq.org/) or [Kirikiroid2](https://play.google.com/store/apps/details?id=org.tvp.kirikiri2) instead.  
+Running unmodified commercial games with this project is not supported.
 
 ## ライセンス / License
 
-吉里吉里SDL2ソース（`src`ディレクトリ内）のコードは、MITライセンスの下でライセンスされています。 詳細については、`LICENSE`をお読みください。  
-このプロジェクトには、サードパーティのコンポーネントが含まれています (GPL に基づいてライセンスされていません)。詳細については、各コンポーネントのライセンスファイルを参照してください。  
+吉里吉里SDL2ソース（`src`ディレクトリ内）のコードはMITライセンスの下でライセンスされています。詳細については`LICENSE`をお読みください。このプロジェクトには、各コンポーネントのライセンスに従うサードパーティ製コードが含まれています。
 
-The code of the Kirikiri SDL2 source (inside the `src` directory) is licensed under the MIT license. Please read `LICENSE` for more information.  
-This project contains third-party components (not licensed under the GPL). Please view the license file in each component for more information.  
+The Kirikiri SDL2 source in the `src` directory is licensed under the MIT License. See `LICENSE` for details. This project also contains third-party code covered by each component's own license.

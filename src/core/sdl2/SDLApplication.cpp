@@ -23,42 +23,9 @@
 #ifdef KRKRZ_ENABLE_CANVAS
 #include "OpenGLScreenSDL2.h"
 #endif
-#ifdef _WIN32
-#include <SDL_syswm.h>
-#endif
 #include <SDL.h>
-#ifdef _WIN32
-#include <shellapi.h>
-#include <stdlib.h>
-#endif
 
-#ifndef _WIN32
 #include <unistd.h>
-#endif
-
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#include <emscripten/html5.h>
-#endif
-
-#ifdef __SWITCH__
-#include <switch.h>
-#endif
-
-#ifdef __EMSCRIPTEN__
-EM_JS_DEPS(main, "$FS,$IDBFS");
-#endif
-
-#if defined(__IPHONEOS__) || defined(__ANDROID__) || defined(__EMSCRIPTEN__) || defined(__vita__) || defined(__SWITCH__)
-#define KRKRSDL2_WINDOW_SIZE_IS_LAYER_SIZE
-#endif
-
-#if defined(__linux__)
-// By specification of SDL_RenderPresent, the backbuffer should be
-// considered invalidated after each call. This is required for
-// some renderers to be enabled.
-#define KRKRSDL2_RENDERER_FULL_UPDATES
-#endif
 
 extern void TVPLoadMessage();
 
@@ -67,24 +34,10 @@ static TVPWindowWindow *_lastWindowWindow, *_currentWindowWindow;
 static SDL_GameController **sdl_controllers = nullptr;
 static int sdl_controller_num = 0;
 
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-static void process_events();
-#else
 static bool process_events();
-#endif
-
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-static int sdl_event_watch(void *userdata, SDL_Event *in_event);
-#endif
 
 static void refresh_controllers()
 {
-#if defined(__IPHONEOS__) || defined(__ANDROID__)
-	// TODO: check why invalid pointers get set in SDL's controller subsystem which causes segfault
-	{
-		return;
-	}
-#endif
 	if (!SDL_WasInit(SDL_INIT_GAMECONTROLLER))
 	{
 		SDL_Init(SDL_INIT_GAMECONTROLLER);
@@ -478,18 +431,6 @@ static int GetMouseButtonState()
 	return s;
 }
 
-#ifdef _WIN32
-struct tTVPMessageReceiverRecord
-{
-	tTVPWindowMessageReceiver Proc;
-	const void *UserData;
-	bool Deliver(tTVPWindowMessage *Message)
-	{
-		return Proc(const_cast<void*>(UserData), Message);
-	}
-};
-#endif
-
 class TVPWindowWindow : public TTVPWindowForm
 {
 protected:
@@ -539,9 +480,6 @@ protected:
 	tjs_int ActualZoomNumer = 1; // Zooming factor numerator (actual)
 	tjs_int InnerWidth = 32;
 	tjs_int InnerHeight = 32;
-#endif
-#ifdef _WIN32
-	tObjectList<tTVPMessageReceiverRecord> WindowMessageReceivers;
 #endif
 
 public:
@@ -698,11 +636,6 @@ public:
 	virtual tjs_int GetInnerWidth() override;
 	/* Called from tTJSNI_Window */
 	virtual tjs_int GetInnerHeight() override;
-#ifdef _WIN32
-	virtual void RegisterWindowMessageReceiver(tTVPWMRRegMode mode, void *proc, const void *userdata) override;
-	bool InternalDeliverMessageToReceiver(tTVPWindowMessage &msg);
-	virtual HWND GetHandle() const override;
-#endif
 	bool should_try_parent_window(SDL_Event event);
 	void window_receive_event(SDL_Event event);
 	bool window_receive_event_input(SDL_Event event);
@@ -775,15 +708,9 @@ TVPWindowWindow::TVPWindowWindow(tTJSNI_Window *w)
 #ifdef KRKRSDL2_WINDOW_SIZE_IS_LAYER_SIZE
 	window_flags |= SDL_WINDOW_RESIZABLE;
 	window_flags |= SDL_WINDOW_ALLOW_HIGHDPI;
-#ifndef __EMSCRIPTEN__
 	window_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
-#endif
 	new_window_w = 0;
 	new_window_h = 0;
-#endif
-
-#ifdef _WIN32
-	window_flags |= SDL_WINDOW_HIDDEN;
 #endif
 
 	this->window = SDL_CreateWindow("krkrsdl2", new_window_x, new_window_y, new_window_w, new_window_h, window_flags);
@@ -791,13 +718,6 @@ TVPWindowWindow::TVPWindowWindow(tTJSNI_Window *w)
 	{
 		TVPThrowExceptionMessage(TJS_W("Cannot create SDL window: %1"), ttstr(SDL_GetError()));
 	}
-#if defined(__EMSCRIPTEN__) && defined(KRKRSDL2_WINDOW_SIZE_IS_LAYER_SIZE)
-	EmscriptenFullscreenStrategy strategy;
-	SDL_memset(&strategy, 0, sizeof(strategy));
-	strategy.scaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_STDDEF;
-	strategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_DEFAULT;
-	emscripten_enter_soft_fullscreen("#canvas", &strategy);
-#endif
 #ifdef KRKRZ_ENABLE_CANVAS
 	this->context = nullptr;
 	if (!TVPIsEnableDrawDevice())
@@ -820,19 +740,11 @@ TVPWindowWindow::TVPWindowWindow(tTJSNI_Window *w)
 	if (TVPIsEnableDrawDevice())
 #endif
 	{
-#if !defined(__EMSCRIPTEN__) || (defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__))
 		this->renderer = SDL_CreateRenderer(this->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 		if (!this->renderer)
 		{
 			TVPAddLog(ttstr("Cannot create SDL renderer: ") + ttstr(SDL_GetError()));
 		}
-#endif
-
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-		// move the event watch to after the SDL_RendererEventWatch to ensure transformed values are received
-		SDL_DelEventWatch(sdl_event_watch, nullptr);
-		SDL_AddEventWatch(sdl_event_watch, nullptr);
-#endif
 
 		this->bitmapCompletion = new TVPSDLBitmapCompletion();
 		if (!this->renderer)
@@ -854,9 +766,6 @@ TVPWindowWindow::TVPWindowWindow(tTJSNI_Window *w)
 			SDL_SetRenderDrawColor(this->renderer, 0x00, 0x00, 0x00, 0xFF);
 		}
 	}
-#ifdef _WIN32
-	::SetWindowLongPtr(this->GetHandle(), GWLP_USERDATA, (LONG_PTR)this);
-#endif
 	Application->AddWindow(this);
 }
 
@@ -907,20 +816,6 @@ TVPWindowWindow::~TVPWindowWindow()
 		SDL_DestroyWindow(this->window);
 		this->window = nullptr;
 	}
-
-#ifdef _WIN32
-	tjs_int count = this->WindowMessageReceivers.GetCount();
-	for (tjs_int i = 0; i < count; i += 1)
-	{
-		tTVPMessageReceiverRecord *item = this->WindowMessageReceivers[i];
-		if (!item)
-		{
-			continue;
-		}
-		delete item;
-		this->WindowMessageReceivers.Remove(i);
-	}
-#endif
 
 	Application->RemoveWindow(this);
 }
@@ -984,12 +879,10 @@ void TVPWindowWindow::SetPaintBoxSize(tjs_int w, tjs_int h)
 	}
 }
 
-#ifndef _WIN32
 static int MulDiv(int nNumber, int nNumerator, int nDenominator)
 {
 	return (int)(((int64_t)nNumber * (int64_t)nNumerator) / nDenominator);
 }
-#endif
 
 void TVPWindowWindow::TranslateWindowToDrawArea(int &x, int &y)
 {
@@ -2241,97 +2134,6 @@ tjs_int TVPWindowWindow::GetInnerHeight()
 #endif
 }
 
-#ifdef _WIN32
-void TVPWindowWindow::RegisterWindowMessageReceiver(tTVPWMRRegMode mode, void *proc, const void *userdata)
-{
-	switch (mode)
-	{
-		case wrmRegister:
-		case wrmUnregister:
-		{
-			tjs_int count = this->WindowMessageReceivers.GetCount();
-			tjs_int i;
-			for (i = 0; i < count; i += 1)
-			{
-				tTVPMessageReceiverRecord *item = this->WindowMessageReceivers[i];
-				if (!item)
-				{
-					continue;
-				}
-				if ((void*)item->Proc == proc)
-				{
-					if (mode == wrmRegister)
-					{
-						break; // have already registered
-					}
-					if (mode == wrmUnregister)
-					{
-						// found
-						this->WindowMessageReceivers.Remove(i);
-						delete item;
-					}
-				}
-			}
-			if (mode == wrmRegister)
-			{
-				if (i == count)
-				{
-					// not have registered
-					tTVPMessageReceiverRecord *item = new tTVPMessageReceiverRecord();
-					item->Proc = (tTVPWindowMessageReceiver)proc;
-					item->UserData = userdata;
-					this->WindowMessageReceivers.Add(item);
-				}
-			}
-			if (mode == wrmUnregister)
-			{
-				this->WindowMessageReceivers.Compact();
-			}
-			break;
-		}
-		default:
-			break;
-	}
-}
-
-bool TVPWindowWindow::InternalDeliverMessageToReceiver(tTVPWindowMessage &msg)
-{
-	if (!this->WindowMessageReceivers.GetCount() || !this->TJSNativeInstance)
-	{
-		return false;
-	}
-#ifdef KRKRSDL2_ENABLE_PLUGINS
-	if (TVPPluginUnloadedAtSystemExit)
-	{
-		return false;
-	}
-#endif
-
-	tObjectListSafeLockHolder<tTVPMessageReceiverRecord> holder(this->WindowMessageReceivers);
-	tjs_int count = this->WindowMessageReceivers.GetSafeLockedObjectCount();
-
-	bool block = false;
-	for (tjs_int i = 0; i < count; i += 1)
-	{
-		tTVPMessageReceiverRecord *item = this->WindowMessageReceivers.GetSafeLockedObjectAt(i);
-		if (!item)
-		{
-			continue;
-		}
-		bool b = item->Deliver(&msg);
-		block = block || b;
-	}
-	return block;
-}
-
-HWND TVPWindowWindow::GetHandle() const
-{
-	SDL_SysWMinfo syswminfo;
-	SDL_VERSION(&syswminfo.version);
-	return SDL_GetWindowWMInfo(this->window, &syswminfo) ? syswminfo.info.win.window : nullptr;
-}
-#endif
-
 bool TVPWindowWindow::should_try_parent_window(SDL_Event event)
 {
 	bool tryParentWindow = false;
@@ -2411,19 +2213,11 @@ void TVPWindowWindow::window_receive_event(SDL_Event event)
 					{
 						TVPPostInputEvent(new tTVPOnKeyDownInputEvent(this->TJSNativeInstance, VK_LEFT, TVP_SS_SHIFT));
 						TVPPostInputEvent(new tTVPOnKeyUpInputEvent(this->TJSNativeInstance, VK_LEFT, TVP_SS_SHIFT));
-#if 0
-						TVPPostInputEvent(new tTVPOnKeyDownInputEvent(this->TJSNativeInstance, VK_DOWN, TVP_SS_SHIFT));
-						TVPPostInputEvent(new tTVPOnKeyUpInputEvent(this->TJSNativeInstance, VK_DOWN, TVP_SS_SHIFT));
-#endif
 					}
 					for (size_t i = 0; i < this->imeCompositionLen - this->imeCompositionCursor; i += 1)
 					{
 						TVPPostInputEvent(new tTVPOnKeyDownInputEvent(this->TJSNativeInstance, VK_RIGHT, 0));
 						TVPPostInputEvent(new tTVPOnKeyUpInputEvent(this->TJSNativeInstance, VK_RIGHT, 0));
-#if 0
-						TVPPostInputEvent(new tTVPOnKeyDownInputEvent(this->TJSNativeInstance, VK_DOWN, 0));
-						TVPPostInputEvent(new tTVPOnKeyUpInputEvent(this->TJSNativeInstance, VK_DOWN, 0));
-#endif
 					}
 					for (size_t i = 0; i < this->imeCompositionLen; i += 1)
 					{
@@ -2472,19 +2266,11 @@ void TVPWindowWindow::window_receive_event(SDL_Event event)
 						{
 							TVPPostInputEvent(new tTVPOnKeyDownInputEvent(this->TJSNativeInstance, VK_LEFT, 0));
 							TVPPostInputEvent(new tTVPOnKeyUpInputEvent(this->TJSNativeInstance, VK_LEFT, 0));
-#if 0
-							TVPPostInputEvent(new tTVPOnKeyDownInputEvent(this->TJSNativeInstance, VK_UP, 0));
-							TVPPostInputEvent(new tTVPOnKeyUpInputEvent(this->TJSNativeInstance, VK_UP, 0));
-#endif
 						}
 						for (size_t i = 0; i < this->imeCompositionSelection; i += 1)
 						{
 							TVPPostInputEvent(new tTVPOnKeyDownInputEvent(this->TJSNativeInstance, VK_RIGHT, TVP_SS_SHIFT));
 							TVPPostInputEvent(new tTVPOnKeyUpInputEvent(this->TJSNativeInstance, VK_RIGHT, TVP_SS_SHIFT));
-#if 0
-							TVPPostInputEvent(new tTVPOnKeyDownInputEvent(this->TJSNativeInstance, VK_DOWN, TVP_SS_SHIFT));
-							TVPPostInputEvent(new tTVPOnKeyUpInputEvent(this->TJSNativeInstance, VK_DOWN, TVP_SS_SHIFT));
-#endif
 						}
 					}
 					if (event.type == SDL_TEXTINPUT)
@@ -2610,9 +2396,7 @@ void TVPWindowWindow::window_receive_event(SDL_Event event)
 				}
 				default:
 				{
-#if !(defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__))
 					this->window_receive_event_input(event);
-#endif
 					return;
 				}
 			}
@@ -2855,14 +2639,11 @@ void sdl_process_events()
 	SDL_Event event;
 	while (SDL_PollEvent(&event))
 	{
-#if defined(_WIN32) && defined(KRKRSDL2_USE_WIN32_EVENT_QUEUE)
-#else
 		if (event.type == NativeEventQueueImplement::native_event_queue_custom_event_type)
 		{
 			((NativeEvent*)event.user.data2)->HandleEvent();
 		}
 		else
-#endif
 		if (_currentWindowWindow)
 		{
 			_currentWindowWindow->window_receive_event(event);
@@ -2874,58 +2655,12 @@ void sdl_process_events()
 	}
 }
 
-#ifdef _WIN32
-static void sdl_windows_message_hook(void *userdata, void *hWnd, unsigned int message, Uint64 wParam, Sint64 lParam)
-{
-	TVPWindowWindow *win = reinterpret_cast<TVPWindowWindow*>(::GetWindowLongPtr((HWND)hWnd, GWLP_USERDATA));
-	tTVPWindowMessage Message;
-	Message.LParam = lParam;
-	Message.WParam = wParam;
-	Message.Msg = message;
-	Message.Result = 0;
-	if (win && win->InternalDeliverMessageToReceiver(Message))
-	{
-		// TODO: return Message.result and block
-	}
-}
-#endif
-
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-static int sdl_event_watch(void *userdata, SDL_Event *in_event)
-{
-	SDL_Event event;
-	SDL_memcpy(&event, in_event, sizeof(SDL_Event));
-#if defined(_WIN32) && defined(KRKRSDL2_USE_WIN32_EVENT_QUEUE)
-#else
-	if (event.type == NativeEventQueueImplement::native_event_queue_custom_event_type)
-	{
-		return 1;
-	}
-#endif
-	if (_currentWindowWindow && _currentWindowWindow->window_receive_event_input(event) && TVPSystemControl)
-	{
-		// process events now
-		// Some JS functions will only work in e.g. mouse down callback due to browser restrictions
-		TVPSystemControl->ApplicationIdle();
-	}
-	return 1;
-}
-#endif
-
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-static void process_events()
-#else
 static bool process_events()
-#endif
 {
 	try
 	{
 		try
 		{
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-			tTJSNI_WaveSoundBuffer::Trigger();
-			tTVPTimerThread::Trigger();
-#endif
 			::Application->Run();
 			if (::Application->IsTarminate())
 			{
@@ -2935,28 +2670,19 @@ static bool process_events()
 					delete TVPSystemControl;
 					TVPSystemControl = nullptr;
 				}
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-				emscripten_cancel_main_loop();
-#else
 				return false;
-#endif
 			}
 		}
 		TJS_CONVERT_TO_TJS_EXCEPTION
 	}
 	TVP_CATCH_AND_SHOW_SCRIPT_EXCEPTION(TJS_W("SDL event processing"));
 
-#if !defined(__EMSCRIPTEN__) || (defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__))
 	return true;
-#endif
 }
 
 void krkrsdl2_pre_init_platform(void)
 {
 	TVPTerminateCode = 0;
-#ifdef _WIN32
-	_set_error_mode(_OUT_TO_STDERR);
-#endif
 }
 
 void krkrsdl2_set_args(int argc, tjs_char **argv)
@@ -2973,13 +2699,11 @@ void krkrsdl2_convert_set_args(int argc, char **argv)
 	for (int i = 0; i < argc; i += 1)
 	{
 		const char *narg;
-#if !defined(__EMSCRIPTEN__) && !defined(__vita__) && !defined(__SWITCH__) && !defined(_WIN32)
 		if (!i)
 		{
 			narg = realpath(argv[i], nullptr);
 		}
 		else
-#endif
 		{
 			narg = argv[i];
 		}
@@ -2993,12 +2717,10 @@ void krkrsdl2_convert_set_args(int argc, char **argv)
 		std::string v_utf8 = narg;
 		tjs_string v_utf16;
 		TVPUtf8ToUtf16(v_utf16, v_utf8);
-#if !defined(__EMSCRIPTEN__) && !defined(__vita__) && !defined(__SWITCH__) && !defined(_WIN32)
 		if (!i)
 		{
 			free((void*)narg);
 		}
-#endif
 		tjs_char *warg_copy = new tjs_char[v_utf16.length() + 1];
 		SDL_memcpy(warg_copy, v_utf16.c_str(), sizeof(tjs_char) * (v_utf16.length()));
 		warg_copy[v_utf16.length()] = '\0';
@@ -3008,23 +2730,6 @@ void krkrsdl2_convert_set_args(int argc, char **argv)
 
 bool krkrsdl2_init_platform(void)
 {
-#ifdef __SWITCH__
-	romfsInit();
-	socketInitializeDefault();
-	nxlinkStdio();
-#endif
-
-	SDL_setenv("VITA_DISABLE_TOUCH_BACK", "1", 1);
-	SDL_setenv("DBUS_FATAL_WARNINGS", "0", 0);
-
-#ifdef _WIN32
-#ifdef SDL_HINT_AUDIODRIVER
-	SDL_SetHintWithPriority(SDL_HINT_AUDIODRIVER, "directsound", SDL_HINT_DEFAULT);
-#endif
-#ifdef SDL_HINT_IME_SHOW_UI
-	SDL_SetHintWithPriority(SDL_HINT_IME_SHOW_UI, "1", SDL_HINT_DEFAULT);
-#endif
-#endif
 
 #ifdef TVP_LOG_TO_COMMANDLINE_CONSOLE
 	SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_VERBOSE);
@@ -3032,23 +2737,13 @@ bool krkrsdl2_init_platform(void)
 
 	TVPLoadMessage();
 
-#ifdef _WIN32
-	SDL_SetWindowsMessageHook(sdl_windows_message_hook, nullptr);
-#endif
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-	SDL_AddEventWatch(sdl_event_watch, nullptr);
-#endif
 	::Application = new tTVPApplication();
 	return !!::Application->StartApplication(_argc, _wargv);
 }
 
 void krkrsdl2_run_main_loop(void)
 {
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-	emscripten_set_main_loop(process_events, 0, 0);
-#else
 	while (process_events());
-#endif
 }
 
 void krkrsdl2_cleanup(void)
@@ -3202,10 +2897,6 @@ const ttstr &TVPGetDefaultFaceNames()
 	}
 	return TVPDefaultFaceNames;
 }
-
-#if defined(__vita__)
-#define KRKRSDL2_OVERRIDE_NEW_ALLOCATOR_FUNCTIONS
-#endif
 
 // Override allocation functions by removing the std::bad_alloc throw and doing garbage collection.
 #ifdef KRKRSDL2_OVERRIDE_NEW_ALLOCATOR_FUNCTIONS

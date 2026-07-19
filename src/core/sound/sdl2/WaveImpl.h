@@ -13,18 +13,9 @@
 
 #define DIRECTSOUND_VERSION 0x0300
 
-#if 0
-#include <mmsystem.h>
-#include <dsound.h>
-#include <ks.h>
-#include <ksmedia.h>
-#endif
-
 #include "WaveIntf.h"
 #include "WaveLoopManager.h"
-#if 1
 #include "OpenALWaveMixer.h"
-#endif
 
 /*[*/
 //---------------------------------------------------------------------------
@@ -80,9 +71,6 @@ public:
 	//-- buffer management ------------------------------------------------
 private:
 	iTVPSoundBuffer* SoundBuffer;
-#if 0
-	LPDIRECTSOUND3DBUFFER Sound3DBuffer;
-#endif
 
 	void ThrowSoundBufferException(const ttstr &reason);
 	void TryCreateSoundBuffer(bool use3d);
@@ -90,10 +78,6 @@ private:
 	void DestroySoundBuffer();
 	void ResetSoundBuffer();
 	void ResetSamplePositions();
-
-#if 0
-	WAVEFORMATEXTENSIBLE Format;
-#endif
 
 	tTVPWaveFormat C_InputFormat;
 	tTVPWaveFormat InputFormat;
@@ -169,9 +153,6 @@ private:
 		tTVPWaveSegmentQueue & segments);
 
 public:
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-	static void Trigger();
-#endif
 
 public:
 	bool FillL2Buffer(bool firstwrite, bool fromdecodethread);
@@ -208,12 +189,6 @@ public:
 
 	tjs_int GetBitsPerSample() const {
 		return InputFormat.BitsPerSample;
-#if 0
-		if(Format.Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE)
-			return Format.Samples.wValidBitsPerSample;
-		else
-			return Format.Format.wBitsPerSample;
-#endif
 	}
 	tjs_int GetChannels() const { return InputFormat.Channels; }
 
@@ -244,9 +219,6 @@ private:
 	static tTVPSoundGlobalFocusMode GlobalFocusMode;
 
 	bool BufferCanControlPan;
-#if 0
-	bool BufferCanControlFrequency;
-#endif
 	tjs_int Pan; // -100000 .. 0 .. 100000
 	D3DVALUE PosX, PosY, PosZ; // 3D position
 

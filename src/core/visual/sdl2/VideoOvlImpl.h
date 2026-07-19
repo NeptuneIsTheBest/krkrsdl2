@@ -35,10 +35,6 @@ class tTJSNI_VideoOverlay : public tTJSNI_BaseVideoOverlay
 	tTVPRect Rect;
 	bool Visible;
 
-#ifdef _WIN32
-	HWND OwnerWindow;
-#endif
-
 	// HWND UtilWindow; // window which receives messages from video overlay object
 	NativeEventQueue<tTJSNI_VideoOverlay> EventQueue;
 
@@ -47,11 +43,6 @@ class tTJSNI_VideoOverlay : public tTJSNI_BaseVideoOverlay
 	class tTJSNI_BaseLayer	*Layer2;
 	tTVPVideoOverlayMode	Mode;	//!< Modeの動的な変更は出来ない。open前にセットしておくこと
 	bool	Loop;
-
-#ifdef _WIN32
-	class tTVPBaseBitmap	*Bitmap[2];	//!< Layer描画用バッファ用Bitmap
-	BYTE			*BmpBits[2];
-#endif
 
 	bool	IsPrepare;			//!< 準備モードかどうか
 

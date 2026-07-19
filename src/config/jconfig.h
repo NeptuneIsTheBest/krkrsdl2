@@ -1,4 +1,4 @@
-/* jconfig.vc --- jconfig.h for Microsoft Visual C++ on Windows 95 or NT. */
+/* jconfig.h -- libjpeg-turbo configuration for macOS on arm64. */
 /* see jconfig.txt for explanations */
 
 #define JPEG_LIB_VERSION 62
@@ -28,20 +28,16 @@
 #define HAVE_STDLIB_H
 #undef NEED_BSD_STRINGS
 #undef NEED_SYS_TYPES_H
-#undef NEED_FAR_POINTERS	/* we presume a 32-bit flat memory model */
+#undef NEED_FAR_POINTERS	/* macOS uses a flat memory model */
 #undef INCOMPLETE_TYPES_BROKEN
 
-/* Define "boolean" as unsigned char, not int, per Windows custom */
-#ifndef __RPCNDR_H__		/* don't conflict if rpcndr.h already read */
+/* Keep the libjpeg boolean ABI used by the bundled sources. */
 typedef unsigned char boolean;
-#endif
 #define HAVE_BOOLEAN		/* prevent jmorecfg.h from redefining it */
 
-/* Define "INT32" as int, not long, per Windows custom */
-#if !(defined(_BASETSD_H_) || defined(_BASETSD_H))   /* don't conflict if basetsd.h already read */
+/* Keep the integer ABI used by the bundled libjpeg sources. */
 typedef short INT16;
 typedef signed int INT32;
-#endif
 #define XMD_H                   /* prevent jmorecfg.h from redefining it */
 
 #ifdef JPEG_INTERNALS
@@ -50,11 +46,4 @@ typedef signed int INT32;
 
 #endif /* JPEG_INTERNALS */
 
-#include <stdint.h>
-#if INTPTR_MAX == INT64_MAX
 #define SIZEOF_SIZE_T 8
-#elif INTPTR_MAX == INT32_MAX
-#define SIZEOF_SIZE_T 4
-#else
-#error "Couldn't determine intptr max"
-#endif

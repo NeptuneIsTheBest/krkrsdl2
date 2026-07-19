@@ -18,9 +18,6 @@
 #include "SysInitIntf.h"
 #include "DebugIntf.h"
 #include "WindowImpl.h"
-#if 0
-#include <mmsystem.h>
-#endif
 
 #include "Application.h"
 #include "NativeEventQueue.h"
@@ -77,23 +74,6 @@ void TVPCallDeliverAllEventsOnIdle()
 static bool TVPBreathing = false;
 void TVPBreathe()
 {
-#if 0
-	TVPEventDisabled = true; // not to call TVP events...
-	TVPBreathing = true;
-	try
-	{
-		Application->ProcessMessages(); // do Windows message pumping
-	}
-	catch(...)
-	{
-		TVPBreathing = false;
-		TVPEventDisabled = false;
-		throw;
-	}
-
-	TVPBreathing = false;
-	TVPEventDisabled = false;
-#endif
 }
 //---------------------------------------------------------------------------
 bool TVPGetBreathing()
@@ -111,17 +91,10 @@ bool TVPGetBreathing()
 //---------------------------------------------------------------------------
 void TVPSetSystemEventDisabledState(bool en)
 {
-#if 0
-	TVPSystemControl->SetEventEnabled( !en );
-	if(!en) TVPDeliverAllEvents();
-#endif
 }
 //---------------------------------------------------------------------------
 bool TVPGetSystemEventDisabledState()
 {
-#if 0
-	return !TVPSystemControl->GetEventEnabled();
-#endif
 	return false;
 }
 //---------------------------------------------------------------------------
@@ -250,7 +223,6 @@ static tjs_int TVPContinousHandlerLimitFrequency = 0;
 //---------------------------------------------------------------------------
 void TVPBeginContinuousEvent()
 {
-#if !defined(__EMSCRIPTEN__) || (defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__))
 	// read commandline options
 	static tjs_int ArgumentGeneration = 0;
 	if(ArgumentGeneration != TVPGetCommandLineArgumentGeneration())
@@ -263,11 +235,7 @@ void TVPBeginContinuousEvent()
 			TVPContinousHandlerLimitFrequency = (tjs_int)val;
 		}
 	}
-#endif
 
-#if 0
-	if(!TVPIsWaitVSync())
-#endif
 	{
 		if(TVPContinousHandlerLimitFrequency == 0)
 		{

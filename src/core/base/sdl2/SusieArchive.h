@@ -13,11 +13,6 @@
 //---------------------------------------------------------------------------
 #include "StorageIntf.h"
 
-#ifdef _WIN32
-// Also defined in StorageImpl.h
-void TVPLoadArchiveSPI(void *inst);
-void TVPUnloadArchiveSPI(void *inst);
-#endif
 class tTVPArchive;
 tTVPArchive * TVPOpenSusieArchive(const ttstr & name);
 

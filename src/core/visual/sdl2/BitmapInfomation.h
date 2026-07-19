@@ -4,11 +4,6 @@
 #ifndef __BITMAP_INFOMATION_H__
 #define __BITMAP_INFOMATION_H__
 
-#ifdef _WIN32
-#define TVPRGBQUAD RGBQUAD
-#define TVPBITMAPINFOHEADER BITMAPINFOHEADER
-#define TVPBITMAPINFO BITMAPINFO
-#else
 struct TVPRGBQUAD {
 	uint8_t    rgbBlue;
 	uint8_t    rgbGreen;
@@ -34,7 +29,6 @@ struct TVPBITMAPINFO {
 	TVPBITMAPINFOHEADER    bmiHeader;
 	TVPRGBQUAD             bmiColors[1];
 };
-#endif
 
 class BitmapInfomation {
 	TVPBITMAPINFO* BitmapInfo;
@@ -55,10 +49,9 @@ public:
 		return *this;
 	}
 
-	// 以下、Win32 のみのメソッド
+	// Accessors for the engine's BMP-compatible metadata layout.
 	TVPBITMAPINFO* GetBITMAPINFO() { return BitmapInfo; }
 	const TVPBITMAPINFO* GetBITMAPINFO() const { return BitmapInfo; }
 };
 
 #endif // __BITMAP_INFOMATION_H__
-

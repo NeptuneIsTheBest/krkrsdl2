@@ -4,14 +4,6 @@
 #ifndef __VIRTUAL_KEY_H__
 #define __VIRTUAL_KEY_H__
 
-#if 0
-#include <android/keycodes.h>
-#endif
-
-#ifdef _WIN32
-#include <winuser.h>
-#endif
-
 #ifdef VK_LBUTTON
 #undef VK_LBUTTON
 #endif

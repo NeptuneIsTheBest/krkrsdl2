@@ -26,20 +26,6 @@ enum {
 	mrCancel,
 };
 
-#if 0
-enum {
-  mtWarning = MB_ICONWARNING,
-  mtError = MB_ICONERROR,
-  mtInformation = MB_ICONINFORMATION,
-  mtConfirmation = MB_ICONQUESTION,
-  mtStop = MB_ICONSTOP,
-  mtCustom = 0
-};
-enum {
-	mbOK = MB_OK,
-};
-#endif
-
 enum
 {
 	mtWarning = SDL_MESSAGEBOX_WARNING,
@@ -59,47 +45,12 @@ enum class eTVPActiveEvent
 	onActive,
 	onDeactive,
 };
-#if 0
-class AcceleratorKey {
-	HACCEL hAccel_;
-	ACCEL* keys_;
-	int key_count_;
-
-public:
-	AcceleratorKey();
-	~AcceleratorKey();
-	void AddKey( WORD id, WORD key, BYTE virt );
-	void DelKey( WORD id );
-	HACCEL GetHandle() { return hAccel_; }
-};
-class AcceleratorKeyTable {
-	std::map<HWND,AcceleratorKey*> keys_;
-	HACCEL hAccel_;
-
-public:
-	AcceleratorKeyTable();
-	~AcceleratorKeyTable();
-	void AddKey( HWND hWnd, WORD id, WORD key, BYTE virt );
-	void DelKey( HWND hWnd, WORD id );
-	void DelTable( HWND hWnd );
-	HACCEL GetHandle(HWND hWnd) {
-		std::map<HWND,AcceleratorKey*>::iterator i = keys_.find(hWnd);
-		if( i != keys_.end() ) {
-			return i->second->GetHandle();
-		}
-		return hAccel_;
-	}
-};
-#endif
 class tTVPApplication {
 	std::vector<class TTVPWindowForm*> windows_list_;
 	tjs_string title_;
 
 	bool is_attach_console_;
 	tjs_string console_title_;
-#if 0
-	AcceleratorKeyTable accel_key_;
-#endif
 	bool tarminate_;
 	bool application_activating_;
 	bool has_map_report_process_;
@@ -113,21 +64,11 @@ class tTVPApplication {
 	void *image_load_thread_;
 #endif
 
-#if 0
-	std::stack<class tTVPWindow*> modal_window_stack_;
-#endif
 	std::vector<char> console_cache_;
 
 private:
 	void CheckConsole();
-#if 0
-	void CloseConsole();
-	void CheckDigitizer();
-#endif
 	void ShowException( const tjs_char* e );
-#if 0
-	void Initialize() {}
-#endif
 
 public:
 	tTVPApplication();
@@ -140,20 +81,6 @@ public:
 
 	bool IsTarminate() const { return tarminate_; }
 
-#ifdef _WIN32
-	HWND GetHandle();
-#endif
-#if 0
-	bool IsIconic() {
-		HWND hWnd = GetHandle();
-		if( hWnd != INVALID_HANDLE_VALUE ) {
-			return 0 != ::IsIconic(hWnd);
-		}
-		return true; // そもそもウィンドウがない
-	}
-	void Minimize();
-	void Restore();
-#endif
 	void BringToFront();
 
 	void AddWindow( class TTVPWindowForm* win ) {
@@ -164,22 +91,10 @@ public:
 		return (unsigned int)windows_list_.size();
 	}
 
-#if 0
-	void FreeDirectInputDeviceForWindows();
-
-	bool ProcessMessage( MSG &msg );
-	void ProcessMessages();
-	void HandleMessage();
-	void HandleIdle(MSG &msg);
-#endif
-
 	tjs_string GetTitle() const { return title_; }
 	void SetTitle( const tjs_string& caption );
 
 	static inline int MessageDlg( const tjs_string& string, const tjs_string& caption, int type, int button ) {
-#if 0
-		return ::MessageBox( nullptr, string.c_str(), caption.c_str(), type|button  );
-#endif
 		tjs_string s_utf16 = string;
 		std::string s_utf8;
 		tjs_string c_utf16 = caption;
@@ -191,39 +106,10 @@ public:
 		return 0;
 	}
 	void Terminate();
-#if 0
-	void SetHintHidePause( int v ) {}
-	void SetShowHint( bool b ) {}
-	void SetShowMainForm( bool b ) {}
-
-
-	HWND GetMainWindowHandle() const;
-#endif
 
 	int ArgC;
 	tjs_char ** ArgV;
 
-#if 0
-	void PostMessageToMainWindow(UINT message, WPARAM wParam, LPARAM lParam);
-
-	void ModalStarted( class tTVPWindow* form ) {
-		modal_window_stack_.push(form);
-	}
-	void ModalFinished();
-	void OnActiveAnyWindow();
-	void DisableWindows();
-	void EnableWindows( const std::vector<class TTVPWindowForm*>& win );
-	void GetDisableWindowList( std::vector<class TTVPWindowForm*>& win );
-	void GetEnableWindowList( std::vector<class TTVPWindowForm*>& win, class TTVPWindowForm* activeWindow );
-
-
-	void RegisterAcceleratorKey(HWND hWnd, char virt, short key, short cmd);
-	void UnregisterAcceleratorKey(HWND hWnd, short cmd);
-	void DeleteAcceleratorKeyTable( HWND hWnd );
-
-	void OnActivate( HWND hWnd );
-	void OnDeactivate( HWND hWnd );
-#endif
 	bool GetActivating() const { return application_activating_; }
 	bool GetNotMinimizing() const;
 
@@ -242,11 +128,6 @@ public:
 		syncfs_is_finished_ = true;
 	}
 };
-#if 0
-std::vector<std::string>* LoadLinesFromFile( const tjs_string& path );
-
-inline HINSTANCE GetHInstance() { return ((HINSTANCE)GetModuleHandle(0)); }
-#endif
 extern class tTVPApplication* Application;
 
 

@@ -12,13 +12,8 @@
 class tTVPAudioRenderer;
 static tTVPAudioRenderer *TVPAudioRenderer;
 
-#ifdef __APPLE__
 #include <OpenAL/al.h>
 #include <OpenAL/alc.h>
-#else
-#include <AL/al.h>
-#include <AL/alc.h>
-#endif
 
 #ifndef AL_FORMAT_MONO_FLOAT32
 #define AL_FORMAT_MONO_FLOAT32   0x10010

@@ -10,9 +10,7 @@
 #include "EventIntf.h"
 #include "DebugIntf.h"
 
-#if defined(__APPLE__) || defined(__linux__) || defined(ANDROID) || defined(__ANDROID__)
 #define USE_MMAP_FOR_ALLOCATION
-#endif
 
 #ifdef USE_MMAP_FOR_ALLOCATION
 #include <sys/mman.h>
@@ -106,9 +104,6 @@ void* tTVPBitmapBitsAlloc::Alloc( tjs_uint size, tjs_uint width, tjs_uint height
 void tTVPBitmapBitsAlloc::Free( void* ptr ) {
 	if(ptr)
 	{
-#if 0
-		tTJSCriticalSectionHolder Lock(AllocCS);	// Lock
-#endif
 
 		// get memory allocation record pointer
 		tjs_uint8 *bptr = (tjs_uint8*)ptr;

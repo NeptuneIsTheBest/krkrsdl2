@@ -7,8 +7,6 @@
 #include <SDL.h>
 #include "OpenGLHeaderSDL2.h"
 
-#ifndef __EMSCRIPTEN__
-
 #ifdef GL_APICALL
 #undef GL_APICALL
 #endif
@@ -264,7 +262,6 @@ GL_APICALL void (GL_APIENTRY* glTexStorage2D)(GLenum target, GLsizei levels, GLe
 GL_APICALL void (GL_APIENTRY* glTexStorage3D)(GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth);
 GL_APICALL void (GL_APIENTRY* glGetInternalformativ)(GLenum target, GLenum internalformat, GLenum pname, GLsizei bufSize, GLint *params);
 }
-#endif
 
 #define FIND_PROC(s,type) (s = (type)::SDL_GL_GetProcAddress( #s ))
 
@@ -276,7 +273,6 @@ void TVPInitializeOpenGLPlatform()
 	{
 		return;
 	}
-#ifndef __EMSCRIPTEN__
 	FIND_PROC( glActiveTexture, void  ( GL_APIENTRY* )( GLenum texture ) );
 	FIND_PROC( glAttachShader, void  ( GL_APIENTRY* )( GLuint program, GLuint shader ) );
 	FIND_PROC( glBindAttribLocation, void  ( GL_APIENTRY* )( GLuint program, GLuint index, const GLchar *name ) );
@@ -525,7 +521,6 @@ void TVPInitializeOpenGLPlatform()
 	FIND_PROC( glTexStorage2D, void  ( GL_APIENTRY* )( GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height ) );
 	FIND_PROC( glTexStorage3D, void  ( GL_APIENTRY* )( GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth ) );
 	FIND_PROC( glGetInternalformativ, void  ( GL_APIENTRY* )( GLenum target, GLenum internalformat, GLenum pname, GLsizei bufSize, GLint *params ) );
-#endif
 
 	TVPANGLEInit = true;
 }

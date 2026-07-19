@@ -21,4 +21,6 @@ Actual behavior goes here.
 ## Specifications
 
   - Commit/Version: 0000000000000000000000000000000000000000
-  - Platform: Not specified (any of Win32/macOS/Linux/Android/iOS/Web)
+  - macOS version: Not specified (macOS 13.0 or later)
+  - Mac model/Apple chip: Not specified
+  - Build type: Not specified (command-line executable or app bundle)

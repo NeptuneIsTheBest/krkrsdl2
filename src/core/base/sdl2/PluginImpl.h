@@ -12,9 +12,6 @@
 #define PluginImplH
 //---------------------------------------------------------------------------
 #include <memory.h>
-#ifdef _WIN32
-#include <objidl.h> // for IStream
-#endif
 
 #include "PluginIntf.h"
 
@@ -22,9 +19,7 @@
 	#include "kmp_pi.h"
 #endif
 
-#ifndef _WIN32
 #include "StorageImpl.h"
-#endif
 
 //---------------------------------------------------------------------------
 /*[*/
@@ -46,29 +41,9 @@ struct iTVPFunctionExporter
 
 /*[*/
 //---------------------------------------------------------------------------
-// TSS related definitions for non-Win32 platforms
+// Portable TSS ABI compatibility definitions
 //---------------------------------------------------------------------------
 
-#ifdef _WIN32
-#ifndef TSS_LPWSTR
-#define TSS_LPWSTR LPWSTR
-#endif
-#ifndef TSS_LONG
-#define TSS_LONG long
-#endif
-#ifndef TSS_ULONG
-#define TSS_ULONG unsigned long
-#endif
-#ifndef TSS_INT64
-#define TSS_INT64 __int64
-#endif
-#ifndef TSS_UINT64
-#define TSS_UINT64 unsigned __int64
-#endif
-#ifndef TSS_HWND
-#define TSS_HWND HWND
-#endif
-#else
 #ifndef TSS_LPWSTR
 #define TSS_LPWSTR tjs_char *
 #endif
@@ -87,8 +62,6 @@ struct iTVPFunctionExporter
 #ifndef TSS_HWND
 #define TSS_HWND void *
 #endif
-#endif
-#ifndef _WIN32
 #ifndef __RPC_FAR
 #define __RPC_FAR
 #endif
@@ -196,7 +169,6 @@ public:
 	virtual HRESULT STDMETHODCALLTYPE SetPosition( 
 		TSS_UINT64 samplepos) = 0;
 };
-#endif
 /*]*/
 
 //---------------------------------------------------------------------------
@@ -214,18 +186,6 @@ extern "C"
 	// TSS
 	typedef HRESULT (STDMETHODCALLTYPE * tTVPGetModuleInstanceProc)(ITSSModule **out,
 		ITSSStorageProvider *provider, IStream * config, TSS_HWND mainwin);
-#if 0
-	typedef ULONG (_stdcall * tTVPGetModuleThreadModelProc)(void);
-	typedef HRESULT (_stdcall * tTVPShowConfigWindowProc)(HWND parentwin,
-		IStream * storage );
-	typedef ULONG (_stdcall * tTVPCanUnloadNowProc)(void);
-
-#ifdef TVP_SUPPORT_OLD_WAVEUNPACKER
-	// WaveUnpacker
-	typedef HRESULT (_stdcall * tTVPCreateWaveUnpackerProc)(IStream *storage,long size,
-		char *name,IWaveUnpacker **out); // old WaveUnpacker stuff
-#endif
-#endif
 }
 //---------------------------------------------------------------------------
 
@@ -233,16 +193,6 @@ extern "C"
 struct ITSSWaveDecoder;
 extern void TVPRegisterTSSWaveDecoder(tTVPGetModuleInstanceProc GetModuleInstance);
 extern ITSSWaveDecoder * TVPSearchAvailTSSWaveDecoder(const ttstr & storage, const ttstr & extension);
-#if 0
-#ifdef TVP_SUPPORT_OLD_WAVEUNPACKER
-class IWaveUnpacker;
-extern IWaveUnpacker * TVPSearchAvailWaveUnpacker(const ttstr & storage, IStream **stream);
-#endif
-#ifdef TVP_SUPPORT_KPI
-extern void * TVPSearchAvailKMPWaveDecoder(const ttstr & storage, KMPMODULE ** module,
-	SOUNDINFO * info);
-#endif
-#endif
 extern void TVPAddExportFunction(const tjs_char *name, void *ptr);
 extern void TVPAddExportFunction(const char *name, void *ptr);
 TJS_EXP_FUNC_DEF(void, TVPThrowPluginUnboundFunctionError, (const char *funcname));
@@ -277,10 +227,6 @@ TJS_EXP_FUNC_DEF(void, TVP_md5_init, (TVP_md5_state_t *pms));
 TJS_EXP_FUNC_DEF(void, TVP_md5_append, (TVP_md5_state_t *pms, const tjs_uint8 *data, int nbytes));
 TJS_EXP_FUNC_DEF(void, TVP_md5_finish, (TVP_md5_state_t *pms, tjs_uint8 *digest));
 
-#if defined(_WIN32)
-/* $$({"tp_stub_ppcond":"defined(_WIN32)"})$$ */
-TJS_EXP_FUNC_DEF(HWND, TVPGetApplicationWindowHandle, ());
-#endif
 TJS_EXP_FUNC_DEF(void, TVPProcessApplicationMessages, ());
 TJS_EXP_FUNC_DEF(void, TVPHandleApplicationMessage, ());
 
@@ -317,12 +263,6 @@ typedef void (TJS_USERENTRY *tTVPFinallyBlockFunction)(void *data);
 /*]*/
 
 TJS_EXP_FUNC_DEF(void, TVPDoTryBlock, (tTVPTryBlockFunction tryblock, tTVPCatchBlockFunction catchblock, tTVPFinallyBlockFunction finallyblock, void *data));
-
-
-#if defined(_WIN32)
-/* $$({"tp_stub_ppcond":"defined(_WIN32)"})$$ */
-TJS_EXP_FUNC_DEF(bool, TVPGetFileVersionOf, (const wchar_t* module_filename, tjs_int &major, tjs_int &minor, tjs_int &release, tjs_int &build));
-#endif
 
 
 //---------------------------------------------------------------------------

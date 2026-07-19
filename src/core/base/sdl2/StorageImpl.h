@@ -17,9 +17,6 @@
 #include <SDL.h>
 
 /*[*/
-#ifdef _WIN32
-#include <objidl.h> // for IStream
-#else
 #ifndef KRKRSDL2_STORAGEIMPL_NO_COMPAT
 #define STDMETHODCALLTYPE
 #define ULONG tjs_uint
@@ -194,17 +191,12 @@ public:
 	virtual HRESULT STDMETHODCALLTYPE Clone(IStream **ppstm) = 0;
 };
 #endif
-#endif
 /*]*/
 
 //---------------------------------------------------------------------------
 // Susie plug-in related
 //---------------------------------------------------------------------------
 // Also defined in SusieArchive.h
-#ifdef _WIN32
-void TVPLoadArchiveSPI(void *inst);
-void TVPUnloadArchiveSPI(void *inst);
-#endif
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------

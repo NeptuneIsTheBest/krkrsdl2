@@ -4,11 +4,7 @@
 #pragma once
 #include "WaveIntf.h"
 
-#ifdef __EMSCRIPTEN__
-#define TVPAL_BUFFER_COUNT 16
-#else
 #define TVPAL_BUFFER_COUNT 4
-#endif
 
 struct ALSoundImpl;
 void TVPInitDirectSound();

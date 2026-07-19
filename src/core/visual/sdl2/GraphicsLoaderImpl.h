@@ -6,60 +6,18 @@
 	See details of license at "license.txt"
 */
 //---------------------------------------------------------------------------
-// Graphics Loader ( loads graphic format from storage )
+// macOS platform extension point for the shared graphics loader.
+//
+// The shared krkrz implementation includes this header so that individual
+// platforms can add loader declarations. The macOS build needs no additional
+// declarations. Its shared call site still refers to the historical Web hook,
+// so map that hook directly to the normal loader fallback without retaining a
+// Web implementation or link-time symbol.
 //---------------------------------------------------------------------------
 
 #ifndef GraphicsLoaderImplH
 #define GraphicsLoaderImplH
 
-#include "GraphicsLoaderIntf.h"
-
-#ifdef _WIN32
-//---------------------------------------------------------------------------
-// tTVPSusiePlugin
-//---------------------------------------------------------------------------
-class tTVPSusiePlugin
-{
-protected:
-	int (PASCAL * GetPluginInfo)(int infono, LPSTR buf,int buflen);
-	int (PASCAL * IsSupported)(LPSTR filename, DWORD dw);
-	int (PASCAL * GetPicture)(LPSTR buf, long len, unsigned int flag,
-			  HANDLE *pHBInfo, HANDLE *pHBm,
-			  FARPROC lpPrgressCallback, long lData);
-	int (PASCAL * GetArchiveInfo)(LPSTR buf,long len,
-			unsigned int flag, HLOCAL *lphInf);
-	int (PASCAL * GetFile)(LPSTR src,long len, LPSTR dest,unsigned int flag,
-				FARPROC prgressCallback, long lData);
-
-	void *ModuleInstance;
-
-	std::vector<ttstr> Extensions;
-
-	tTVPSusiePlugin(void *inst, const char *api);
-	virtual ~tTVPSusiePlugin();
-
-	static int PASCAL ProgressCallback(int nNum,int nDenom,long lData) { return 0; }
-
-public:
-	const std::vector<ttstr> & GetExtensions() const { return Extensions; }
-
-	void *GetModuleInstance() const { return ModuleInstance; }
-};
-//---------------------------------------------------------------------------
-
-
-
-//---------------------------------------------------------------------------
-// Susie Plug-in management functions
-// ( support of SPI for archive files is in StorageImpl.cpp )
-//---------------------------------------------------------------------------
-extern void TVPLoadPictureSPI(void *inst, tTVPBMPAlphaType alphatype = batMulAlpha);
-extern void TVPUnloadPictureSPI(void *inst);
-//---------------------------------------------------------------------------
-#endif
-
-bool TVPLoadEmscriptenPreloadedData(void* formatdata, void *callbackdata, tTVPGraphicSizeCallback sizecallback,
-	tTVPGraphicScanLineCallback scanlinecallback, tTVPMetaInfoPushCallback metainfopushcallback,
-	const ttstr &name, tjs_int keyidx, tTVPGraphicLoadMode mode);
+#define TVPLoadEmscriptenPreloadedData(...) false
 
 #endif
