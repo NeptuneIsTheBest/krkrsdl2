@@ -1,6 +1,6 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Kirikiri SDL2 Discussions
+  - name: Kirikiri SDL3 Discussions
     url: https://github.com/orgs/krkrsdl2/discussions
     about: Create a new post here.
   - name: IRC/Matrix chat

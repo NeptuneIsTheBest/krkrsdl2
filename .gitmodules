@@ -1,7 +1,7 @@
 [submodule "external/krkrz"]
 	path = external/krkrz
 	url = https://github.com/NeptuneIsTheBest/krkrz.git
-	branch = krkrsdl2
+	branch = krkrsdl3
 [submodule "external/simde"]
 	path = external/simde
 	url = https://github.com/simd-everywhere/simde.git

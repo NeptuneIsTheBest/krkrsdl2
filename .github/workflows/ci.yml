@@ -18,14 +18,22 @@ jobs:
         variant:
           - name: CLI
             bundle: "OFF"
-            binary: build/krkrsdl2
-            archive: krkrsdl2-macos-arm64.zip
-            artifact: krkrsdl2-macos-arm64
+            canvas: "OFF"
+            binary: build/krkrsdl3
+            archive: krkrsdl3-macos-arm64.zip
+            artifact: krkrsdl3-macos-arm64
           - name: App Bundle
             bundle: "ON"
-            binary: build/krkrsdl2.app/Contents/MacOS/krkrsdl2
-            archive: krkrsdl2-macos-arm64-app.zip
-            artifact: krkrsdl2-macos-arm64-app
+            canvas: "OFF"
+            binary: build/krkrsdl3.app/Contents/MacOS/krkrsdl3
+            archive: krkrsdl3-macos-arm64-app.zip
+            artifact: krkrsdl3-macos-arm64-app
+          - name: Canvas CLI
+            bundle: "OFF"
+            canvas: "ON"
+            binary: build/krkrsdl3
+            archive: krkrsdl3-macos-arm64-canvas.zip
+            artifact: krkrsdl3-macos-arm64-canvas
 
     steps:
       - name: Checkout repository
@@ -44,6 +52,7 @@ jobs:
           -DCMAKE_OSX_ARCHITECTURES=arm64
           -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
           -DOPTION_BUILD_MACOS_BUNDLE=${{ matrix.variant.bundle }}
+          -DOPTION_ENABLE_CANVAS=${{ matrix.variant.canvas }}
           -DEMBED_DATA_PATH=${{ matrix.variant.bundle == 'ON' && 'data.xp3' || 'data' }}
 
       - name: Build
@@ -51,22 +60,22 @@ jobs:
 
       - name: Validate target
         env:
-          KRKRSDL2_BINARY: ${{ matrix.variant.binary }}
+          KRKRSDL3_BINARY: ${{ matrix.variant.binary }}
         run: |
-          test "$(lipo -archs "$KRKRSDL2_BINARY")" = "arm64"
-          test "$(otool -l "$KRKRSDL2_BINARY" | awk '/LC_BUILD_VERSION/{seen=1} seen && /minos/{print $2; exit}')" = "13.0"
-          if otool -L "$KRKRSDL2_BINARY" | grep -E '(/opt/homebrew|/usr/local|Cellar).*(SDL2|SDL2-2\.0)'; then
-            echo "Unexpected external SDL2 dependency" >&2
+          test "$(lipo -archs "$KRKRSDL3_BINARY")" = "arm64"
+          test "$(otool -l "$KRKRSDL3_BINARY" | awk '/LC_BUILD_VERSION/{seen=1} seen && /minos/{print $2; exit}')" = "13.0"
+          if otool -L "$KRKRSDL3_BINARY" | grep -E '(SDL2|SDL3|FAudio)'; then
+            echo "Unexpected dynamic SDL or FAudio dependency" >&2
             exit 1
           fi
 
       - name: Archive CLI
         if: matrix.variant.bundle == 'OFF'
-        run: ditto -ck --rsrc --sequesterRsrc build/krkrsdl2 "build/${{ matrix.variant.archive }}"
+        run: ditto -ck --rsrc --sequesterRsrc build/krkrsdl3 "build/${{ matrix.variant.archive }}"
 
       - name: Archive app bundle
         if: matrix.variant.bundle == 'ON'
-        run: ditto -ck --rsrc --sequesterRsrc --keepParent build/krkrsdl2.app "build/${{ matrix.variant.archive }}"
+        run: ditto -ck --rsrc --sequesterRsrc --keepParent build/krkrsdl3.app "build/${{ matrix.variant.archive }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -87,33 +96,33 @@ jobs:
 
       - name: Generate plugin stub
         run: |
-          mkdir -p build/krkrsdl2-tp_stub
-          python3 src/core/base/sdl2/makestub.py build/krkrsdl2-tp_stub
-          cp src/config/tp_stub_template.cmake build/krkrsdl2-tp_stub/CMakeLists.txt
+          mkdir -p build/krkrsdl3-tp_stub
+          python3 src/core/base/sdl3/makestub.py build/krkrsdl3-tp_stub
+          cp src/config/tp_stub_template.cmake build/krkrsdl3-tp_stub/CMakeLists.txt
 
       - name: Configure plugin stub
         run: >-
-          cmake -S build/krkrsdl2-tp_stub -B build/krkrsdl2-tp_stub/build -G "Unix Makefiles"
+          cmake -S build/krkrsdl3-tp_stub -B build/krkrsdl3-tp_stub/build -G "Unix Makefiles"
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_OSX_ARCHITECTURES=arm64
           -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
 
       - name: Build plugin stub
-        run: cmake --build build/krkrsdl2-tp_stub/build --parallel
+        run: cmake --build build/krkrsdl3-tp_stub/build --parallel
 
       - name: Validate plugin stub
         run: |
-          test "$(lipo -archs build/krkrsdl2-tp_stub/build/libtp_stub.a)" = "arm64"
-          test "$(otool -l build/krkrsdl2-tp_stub/build/CMakeFiles/tp_stub.dir/tp_stub.cpp.o | awk '/LC_BUILD_VERSION/{seen=1} seen && /minos/{print $2; exit}')" = "13.0"
+          test "$(lipo -archs build/krkrsdl3-tp_stub/build/libtp_stub.a)" = "arm64"
+          test "$(otool -l build/krkrsdl3-tp_stub/build/CMakeFiles/tp_stub.dir/tp_stub.cpp.o | awk '/LC_BUILD_VERSION/{seen=1} seen && /minos/{print $2; exit}')" = "13.0"
 
       - name: Archive plugin stub
-        run: tar -czf build/krkrsdl2-tp_stub.tar.gz --exclude=krkrsdl2-tp_stub/build -C build krkrsdl2-tp_stub
+        run: tar -czf build/krkrsdl3-tp_stub.tar.gz --exclude=krkrsdl3-tp_stub/build -C build krkrsdl3-tp_stub
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: krkrsdl2-tp_stub
-          path: build/krkrsdl2-tp_stub.tar.gz
+          name: krkrsdl3-tp_stub
+          path: build/krkrsdl3-tp_stub.tar.gz
 
   create-release:
     name: Publish latest macOS builds
@@ -132,9 +141,10 @@ jobs:
 
       - name: Prepare release assets
         run: |
-          cp krkrsdl2-macos-arm64/*.zip .
-          cp krkrsdl2-macos-arm64-app/*.zip .
-          cp krkrsdl2-tp_stub/*.tar.gz .
+          cp krkrsdl3-macos-arm64/*.zip .
+          cp krkrsdl3-macos-arm64-app/*.zip .
+          cp krkrsdl3-macos-arm64-canvas/*.zip .
+          cp krkrsdl3-tp_stub/*.tar.gz .
 
       - name: Create prerelease
         uses: marvinpinto/action-automatic-releases@latest

@@ -1,3 +1,3 @@
-# Kirikiri SDL2
+# Kirikiri SDL3
 
 The contents of this file have been moved to `README.md`.

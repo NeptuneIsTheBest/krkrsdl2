@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: MIT */
 /* Copyright (c) Kirikiri SDL2 Developers */
 
-#ifndef KRKRSDL2_SSE2_ONLY_X86_SIMD_UTIL_H
-#define KRKRSDL2_SSE2_ONLY_X86_SIMD_UTIL_H
+#ifndef KRKRSDL3_SSE2_ONLY_X86_SIMD_UTIL_H
+#define KRKRSDL3_SSE2_ONLY_X86_SIMD_UTIL_H
 
 /*
  * krkrz's shared x86simdutil.h mixes SSE and AVX helpers. The macOS arm64

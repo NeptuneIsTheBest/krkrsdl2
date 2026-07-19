@@ -1,8 +1,8 @@
-# 吉里吉里SDL2 / Kirikiri SDL2
+# 吉里吉里SDL3 / Kirikiri SDL3
 
-吉里吉里SDL2は、[吉里吉里Z](https://krkrz.github.io/)をSDL2上へ移植したプロジェクトです。現在サポートする実行環境は、Apple Siliconを搭載したMac上のmacOS 13 Ventura以降だけです。
+吉里吉里SDL3は、[吉里吉里Z](https://krkrz.github.io/)をSDL3上へ移植したプロジェクトです。現在サポートする実行環境は、Apple Siliconを搭載したMac上のmacOS 13 Ventura以降だけです。
 
-Kirikiri SDL2 is a port of [Kirikiri Z](https://krkrz.github.io/) to SDL2. The only supported target is macOS 13 Ventura or later on an Apple Silicon Mac.
+Kirikiri SDL3 is a port of [Kirikiri Z](https://krkrz.github.io/) to SDL3. The only supported target is macOS 13 Ventura or later on an Apple Silicon Mac.
 
 詳細 / More information: https://krkrsdl2.github.io/krkrsdl2/
 
@@ -50,7 +50,7 @@ Python 3 is required to regenerate the external-plugin stub:
 
 ```sh
 mkdir -p build-tp-stub
-python3 src/core/base/sdl2/makestub.py build-tp-stub
+python3 src/core/base/sdl3/makestub.py build-tp-stub
 cp src/config/tp_stub_template.cmake build-tp-stub/CMakeLists.txt
 cmake -S build-tp-stub -B build-tp-stub/build
 cmake --build build-tp-stub/build --parallel
@@ -66,6 +66,6 @@ Running unmodified commercial games with this project is not supported.
 
 ## ライセンス / License
 
-吉里吉里SDL2ソース（`src`ディレクトリ内）のコードはMITライセンスの下でライセンスされています。詳細については`LICENSE`をお読みください。このプロジェクトには、各コンポーネントのライセンスに従うサードパーティ製コードが含まれています。
+吉里吉里SDL3ソース（`src`ディレクトリ内）のコードはMITライセンスの下でライセンスされています。詳細については`LICENSE`をお読みください。このプロジェクトには、各コンポーネントのライセンスに従うサードパーティ製コードが含まれています。
 
-The Kirikiri SDL2 source in the `src` directory is licensed under the MIT License. See `LICENSE` for details. This project also contains third-party code covered by each component's own license.
+The Kirikiri SDL3 source in the `src` directory is licensed under the MIT License. See `LICENSE` for details. This project also contains third-party code covered by each component's own license.
