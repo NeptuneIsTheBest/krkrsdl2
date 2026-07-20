@@ -295,6 +295,15 @@ public:
 		return _sourcePos[0];
 	}
 
+	void SetFrequency(tjs_int frequency) override
+	{
+		tTJSCriticalSectionHolder holder(_buffer_mtx);
+		const ALfloat pitch = static_cast<ALfloat>(frequency) /
+			static_cast<ALfloat>(_format.SamplesPerSec);
+		alSourcef(_alSource, AL_PITCH, pitch);
+		CheckALError("alSourcef AL_PITCH");
+	}
+
 	bool IsPlaying() override
 	{
 		return _playing;

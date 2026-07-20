@@ -12,6 +12,7 @@
 
 #include <math.h>
 #include <algorithm>
+#include <mutex>
 #include "SystemControl.h"
 #include "DebugIntf.h"
 #include "MsgIntf.h"
@@ -278,6 +279,7 @@ tjs_int TVPDSAttenuateToPan(tjs_int att)
 //---------------------------------------------------------------------------
 static bool TVPPrimaryBufferPlayingByProgram = false;
 static bool TVPDeferedSettingAvailable = false;
+static bool TVPDirectSoundUse3D = false;
 //---------------------------------------------------------------------------
 static void TVPEnsurePrimaryBufferPlay()
 {
@@ -290,7 +292,13 @@ static void TVPEnsurePrimaryBufferPlay()
 }
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
-void TVPWaveSoundBufferCommitSettings() {}
+void TVPWaveSoundBufferCommitSettings()
+{
+	// OpenAL applies source settings immediately, but callers still rely on
+	// this function consuming the deferred-settings state.
+	if(TVPDeferedSettingAvailable)
+		TVPDeferedSettingAvailable = false;
+}
 //---------------------------------------------------------------------------
 static void TVPMakeSilentWaveBytes(void *dest, tjs_int bytes, const tTVPWaveFormat *format)
 {
@@ -334,7 +342,24 @@ tTJSCriticalSection TVPWaveSoundBufferVectorCS;
 class tTVPWaveSoundBufferThread : public tTVPThread
 {
 	tTVPThreadEvent Event;
+	std::mutex SuspendMutex;
 	bool SuspendThread;
+
+	void SetSuspend()
+	{
+		std::lock_guard<std::mutex> lock(SuspendMutex);
+		SuspendThread = true;
+	}
+	void ResetSuspend()
+	{
+		std::lock_guard<std::mutex> lock(SuspendMutex);
+		SuspendThread = false;
+	}
+	bool GetSuspend()
+	{
+		std::lock_guard<std::mutex> lock(SuspendMutex);
+		return SuspendThread;
+	}
 
 	bool PendingLabelEventExists;
 	bool WndProcToBeCalled;
@@ -371,9 +396,9 @@ void TVPUnlockSoundMixer() {
 }
 //---------------------------------------------------------------------------
 tTVPWaveSoundBufferThread::tTVPWaveSoundBufferThread()
-	: EventQueue(this,&tTVPWaveSoundBufferThread::UtilWndProc),
-	SuspendThread( false ), PendingLabelEventExists( false ),
-	NextLabelEventTick( 0 ), LastFilledTick( 0 ), WndProcToBeCalled( false )
+	: SuspendThread( false ), PendingLabelEventExists( false ),
+	WndProcToBeCalled( false ), NextLabelEventTick( 0 ), LastFilledTick( 0 ),
+	EventQueue(this,&tTVPWaveSoundBufferThread::UtilWndProc)
 {
 	EventQueue.Allocate();
 	SetPriority(ttpHighest);
@@ -384,6 +409,7 @@ tTVPWaveSoundBufferThread::~tTVPWaveSoundBufferThread()
 {
 	SetPriority(ttpNormal);
 	Terminate();
+	ResetSuspend();
 	Event.Set();
 	WaitFor();
 	EventQueue.Deallocate();
@@ -517,18 +543,32 @@ void tTVPWaveSoundBufferThread::Execute(void)
 		{
 			Event.WaitFor(1);
 		}
+
+		if(!GetTerminated() && GetSuspend())
+			Event.WaitFor(0); // wait indefinitely until playback resumes
 	}
 }
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 void tTVPWaveSoundBufferThread::Start()
 {
+	ResetSuspend();
 	TVPPrimaryBufferPlayingByProgram = true;
 	Event.Set();
 }
 //---------------------------------------------------------------------------
 void tTVPWaveSoundBufferThread::CheckBufferSleep()
 {
+	tTJSCriticalSectionHolder holder(TVPWaveSoundBufferVectorCS);
+	std::vector<tTJSNI_WaveSoundBuffer *>::iterator i;
+	for(i = TVPWaveSoundBufferVector.begin();
+		i != TVPWaveSoundBufferVector.end(); i++)
+	{
+		if((*i)->ThreadCallbackEnabled)
+			return;
+	}
+
+	SetSuspend(); // all buffers are sleeping
 }
 //---------------------------------------------------------------------------
 
@@ -624,11 +664,17 @@ void TVPReleaseDirectSound()
 //---------------------------------------------------------------------------
 void TVPSetWaveSoundBufferUse3DMode(bool b)
 {
+	// Changing the 3D mode invalidates the format of existing buffers.
+	if(b != TVPDirectSoundUse3D)
+	{
+		TVPReleaseDirectSound();
+		TVPDirectSoundUse3D = b;
+	}
 }
 //---------------------------------------------------------------------------
 bool TVPGetWaveSoundBufferUse3DMode()
 {
-	return false;
+	return TVPDirectSoundUse3D;
 }
 //---------------------------------------------------------------------------
 
@@ -896,7 +942,8 @@ void tTJSNI_WaveSoundBuffer::CreateSoundBuffer()
 		{
 			ttstr msg;
 			bool failed;
-			bool use3d = false;
+			bool use3d = (InputFormat.Channels >= 3 || InputFormat.SpeakerConfig != 0) ?
+				false : TVPDirectSoundUse3D;
 
 			failed = false;
 			try
@@ -1779,6 +1826,7 @@ void tTJSNI_WaveSoundBuffer::SetPosZ(D3DVALUE v)
 //---------------------------------------------------------------------------
 void tTJSNI_WaveSoundBuffer::SetFrequencyToBuffer()
 {
+	if(SoundBuffer) SoundBuffer->SetFrequency(Frequency);
 }
 //---------------------------------------------------------------------------
 void tTJSNI_WaveSoundBuffer::SetFrequency(tjs_int freq)
@@ -1991,4 +2039,3 @@ TJS_END_NATIVE_PROP_DECL_OUTER(cls, useVisBuffer)
 	return cls;
 }
 //---------------------------------------------------------------------------
-

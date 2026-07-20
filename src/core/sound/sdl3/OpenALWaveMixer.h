@@ -23,6 +23,7 @@ public:
 	virtual float GetVolume() = 0;
 	virtual void SetPan(float v) = 0;
 	virtual float GetPan() = 0;
+	virtual void SetFrequency(tjs_int frequency) = 0;
 	virtual void AppendBuffer(const void *buf, unsigned int len) = 0;
 	virtual bool IsBufferValid() = 0;
 	virtual tjs_uint GetCurrentPlaySamples() = 0;
