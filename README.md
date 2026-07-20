@@ -44,6 +44,24 @@ cmake --build build-app --parallel
 
 The build defaults to `arm64` and a macOS 13.0 deployment target.
 
+## オーディオ形式 / Audio formats
+
+`WaveSoundBuffer` has built-in support for the following music formats:
+
+- MP3 (`.mp3`) and FLAC (`.flac`)
+- Ogg Vorbis and Ogg Opus (`.ogg`, `.oga`), plus Ogg Opus files named `.opus`
+- AAC in ADTS (`.aac`, `.adts`) or MPEG-4 containers (`.m4a`, `.m4r`, `.m4b`, `.mp4`, `.mpg4`)
+- Apple Lossless (ALAC) in MPEG-4 (`.m4a`) or Core Audio (`.caf`, `.caff`) containers
+
+MP3, FLAC, AAC, and ALAC are decoded with the macOS AudioToolbox framework.
+Ogg Opus uses the vendored `opusfile` implementation, and Ogg Vorbis uses the
+pinned `stb_vorbis` 1.20 copy in FAudio (available under its MIT/public-domain
+dual license). No Homebrew libraries or other runtime packages are required.
+
+All decoders read through Kirikiri storage streams, so files in XP3 archives,
+sample seeking, and `.sli` loop information continue to work. Decoder creators
+registered later by external plugins retain their existing priority.
+
 ## プラグインスタブ / Plugin stub
 
 Python 3 is required to regenerate the external-plugin stub:

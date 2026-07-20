@@ -12,7 +12,7 @@ external/krkrz/base/XP3Archive.cpp
 external/krkrz/extension/Extension.cpp
 external/krkrz/msg/MsgIntf.cpp
 external/krkrz/sound/MathAlgorithms.cpp
-external/krkrz/sound/OpusCodecDecoder.cpp
+src/core/sound/sdl3/AudioCodecDecoder.cpp
 external/krkrz/sound/PhaseVocoderDSP.cpp
 external/krkrz/sound/PhaseVocoderFilter.cpp
 external/krkrz/sound/QueueSoundBufferImpl.cpp

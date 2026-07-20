@@ -243,7 +243,12 @@ endfunction()
 add_library(krkrsdl3common STATIC)
 target_sources(krkrsdl3common PRIVATE ${KRKRSDL3COMMON_SRC})
 target_include_directories(krkrsdl3common PUBLIC ${KRKRSDL3COMMON_INCLUDES})
-target_link_libraries(krkrsdl3common PUBLIC SDL3::SDL3-static FAudio-static)
+find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox REQUIRED)
+target_link_libraries(krkrsdl3common PUBLIC
+	SDL3::SDL3-static
+	FAudio-static
+	${AUDIOTOOLBOX_FRAMEWORK}
+)
 krkrsdl3_configure_target(krkrsdl3common)
 
 add_executable(krkrsdl3 src/core/sdl3/SDLEntrypoint.cpp)
