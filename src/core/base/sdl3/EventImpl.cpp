@@ -21,6 +21,7 @@
 
 #include "Application.h"
 #include "NativeEventQueue.h"
+#include "TVPWindow.h"
 #include "UserEvent.h"
 
 //---------------------------------------------------------------------------
@@ -74,6 +75,23 @@ void TVPCallDeliverAllEventsOnIdle()
 static bool TVPBreathing = false;
 void TVPBreathe()
 {
+	const bool event_disabled = TVPEventDisabled;
+	const bool breathing = TVPBreathing;
+	TVPEventDisabled = true; // do not invoke TVP events while pumping SDL events
+	TVPBreathing = true;
+	try
+	{
+		sdl_process_events();
+	}
+	catch(...)
+	{
+		TVPBreathing = breathing;
+		TVPEventDisabled = event_disabled;
+		throw;
+	}
+
+	TVPBreathing = breathing;
+	TVPEventDisabled = event_disabled;
 }
 //---------------------------------------------------------------------------
 bool TVPGetBreathing()
@@ -91,11 +109,16 @@ bool TVPGetBreathing()
 //---------------------------------------------------------------------------
 void TVPSetSystemEventDisabledState(bool en)
 {
+	if(!TVPSystemControl) return;
+
+	TVPSystemControl->SetEventEnabled(!en);
+	if(!en) TVPDeliverAllEvents();
 }
 //---------------------------------------------------------------------------
 bool TVPGetSystemEventDisabledState()
 {
-	return false;
+	if(!TVPSystemControl) return false;
+	return !TVPSystemControl->GetEventEnabled();
 }
 //---------------------------------------------------------------------------
 
