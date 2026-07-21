@@ -874,7 +874,7 @@ void TJS_INTF_METHOD tTJSNI_WaveSoundBuffer::Invalidate()
 //---------------------------------------------------------------------------
 void tTJSNI_WaveSoundBuffer::ThrowSoundBufferException(const ttstr &reason)
 {
-	TVPThrowExceptionMessage(TVPCannotCreateDSSecondaryBuffer,
+	TVPThrowExceptionMessage(TVPCannotCreateSoundBuffer,
 		reason, ttstr().printf(TJS_W("frequency=%d/channels=%d/bits=%d"),
 		InputFormat.SamplesPerSec, InputFormat.Channels,
 		InputFormat.BitsPerSample));

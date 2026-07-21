@@ -45,7 +45,7 @@ static void TVPRemoveVideoOverlay(tTJSNI_VideoOverlay *ovl)
 //---------------------------------------------------------------------------
 static void TVPShutdownVideoOverlay()
 {
-	// shutdown all overlay object and release krmovie.dll / krflash.dll
+	// Shut down all overlay objects.
 	std::vector<tTJSNI_VideoOverlay*>::iterator i;
 	for(i = TVPVideoOverlayVector.begin(); i != TVPVideoOverlayVector.end(); i++)
 	{
@@ -555,4 +555,3 @@ tTJSNativeClass * TVPCreateNativeClass_VideoOverlay()
 	return new tTJSNC_VideoOverlay();
 }
 //---------------------------------------------------------------------------
-

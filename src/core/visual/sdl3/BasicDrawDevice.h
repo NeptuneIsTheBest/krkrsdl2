@@ -5,9 +5,6 @@
 #define BASIC_DRAW_DEVICE_H
 
 #include "DrawDevice.h"
-#if 0
-#include <d3d9.h>
-#endif
 
 class TVPSDLBitmapCompletion;
 
@@ -20,72 +17,13 @@ class tTVPBasicDrawDevice : public tTVPDrawDevice
 
 	TVPSDLBitmapCompletion* bitmap_completion;
 
-#if 0
-	void* TargetWindow;
-	bool IsMainWindow;
-	bool DrawUpdateRectangle;
-	bool BackBufferDirty;
-
-	void*				Direct3D;
-	void*		Direct3DDevice;
-	void*		Texture;
-	int	D3dPP;
-	int			DispMode;
-
-	UINT	CurrentMonitor;
-	void*	TextureBuffer; //!< テクスチャのサーフェースへのメモリポインタ
-	long	TexturePitch; //!< テクスチャのピッチ
-
-	tjs_uint TextureWidth; //!< テクスチャの横幅
-	tjs_uint TextureHeight; //!< テクスチャの縦幅
-
-	bool ShouldShow; //!< show で実際に画面に画像を転送すべきか
-
-	tjs_uint VsyncInterval;
-#endif
-
 public:
 	tTVPBasicDrawDevice(); //!< コンストラクタ
 
 private:
 	~tTVPBasicDrawDevice(); //!< デストラクタ
 
-	void InvalidateAll();
-
-#if 0
-	UINT GetMonitorNumber( HWND window );
-
-	bool IsTargetWindowActive() const;
-
-	bool GetDirect3D9Device();
-	HRESULT InitializeDirect3DState();
-	HRESULT DecideD3DPresentParameters();
-
-	bool CreateD3DDevice();
-#endif
-	void DestroyD3DDevice();
-
-#if 0
-	bool CreateTexture();
-	void DestroyTexture();
-#endif
-
-	void TryRecreateWhenDeviceLost();
-#if 0
-	void ErrorToLog( HRESULT hr );
-	void CheckMonitorMoved();
-#endif
-
 public:
-#if 0
-	void SetToRecreateDrawer() { DestroyD3DDevice(); }
-#endif
-
-public:
-#if 0
-	void EnsureDevice();
-#endif
-
 //---- LayerManager の管理関連
 	virtual void TJS_INTF_METHOD AddLayerManager(iTVPLayerManager * manager);
 
@@ -96,9 +34,6 @@ public:
 
 //---- 再描画関連
 	virtual void TJS_INTF_METHOD Show();
-#if 0
-	virtual bool TJS_INTF_METHOD WaitForVBlank( tjs_int* in_vblank, tjs_int* delayed );
-#endif
 
 //---- LayerManager からの画像受け渡し関連
 	virtual void TJS_INTF_METHOD StartBitmapCompletion(iTVPLayerManager * manager);
@@ -116,8 +51,6 @@ public:
 
 };
 //---------------------------------------------------------------------------
-
-
 //---------------------------------------------------------------------------
 // tTJSNI_BasicDrawDevice
 //---------------------------------------------------------------------------
@@ -141,9 +74,6 @@ public:
 
 };
 //---------------------------------------------------------------------------
-
-
-
 //---------------------------------------------------------------------------
 // tTJSNC_BasicDrawDevice
 //---------------------------------------------------------------------------
@@ -158,6 +88,4 @@ private:
 	iTJSNativeInstance *CreateNativeInstance();
 };
 //---------------------------------------------------------------------------
-
-
 #endif // BASIC_DRAW_DEVICE_H

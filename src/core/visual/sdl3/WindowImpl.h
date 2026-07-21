@@ -16,69 +16,7 @@
 #include "WindowIntf.h"
 
 
-/*[*/
-//---------------------------------------------------------------------------
-// window message receivers
-//---------------------------------------------------------------------------
-enum tTVPWMRRegMode { wrmRegister=0, wrmUnregister=1 };
-
-
-/*]*/
-//---------------------------------------------------------------------------
-
 #include "TVPWindow.h"
-
-
-//---------------------------------------------------------------------------
-/*
-struct tTVP_devicemodeA {
-	// copy of DEVMODE, to avoid windows platform SDK version mismatch
-#pragma pack(push, 1)
-	BYTE   dmDeviceName[CCHDEVICENAME];
-	WORD dmSpecVersion;
-	WORD dmDriverVersion;
-	WORD dmSize;
-	WORD dmDriverExtra;
-	DWORD dmFields;
-	union {
-	  struct {
-		short dmOrientation;
-		short dmPaperSize;
-		short dmPaperLength;
-		short dmPaperWidth;
-	  };
-	  POINTL dmPosition;
-	};
-	short dmScale;
-	short dmCopies;
-	short dmDefaultSource;
-	short dmPrintQuality;
-	short dmColor;
-	short dmDuplex;
-	short dmYResolution;
-	short dmTTOption;
-	short dmCollate;
-	BYTE   dmFormName[CCHFORMNAME];
-	WORD   dmLogPixels;
-	DWORD  dmBitsPerPel;
-	DWORD  dmPelsWidth;
-	DWORD  dmPelsHeight;
-	union {
-		DWORD  dmDisplayFlags;
-		DWORD  dmNup;
-	};
-	DWORD  dmDisplayFrequency;
-	DWORD  dmICMMethod;
-	DWORD  dmICMIntent;
-	DWORD  dmMediaType;
-	DWORD  dmDitherType;
-	DWORD  dmReserved1;
-	DWORD  dmReserved2;
-#pragma pack(pop)
-};
-*/
-//---------------------------------------------------------------------------
-
 
 //---------------------------------------------------------------------------
 // Mouse Cursor Management
@@ -179,8 +117,6 @@ public:
 	void ZoomRectangle(
 		tjs_int & left, tjs_int & top,
 		tjs_int & right, tjs_int & bottom);
-	void RegisterWindowMessageReceiver(tTVPWMRRegMode mode,
-		void * proc, const void *userdata);
 
 //-- methods
 	void Close();

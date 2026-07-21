@@ -17,7 +17,10 @@
 #include "tjsArray.h"
 #include "StorageIntf.h"
 #include "SDLBitmapCompletion.h"
-#include "TouchGestureRecognizer.h"
+#include "TouchPoint.h"
+#include "VelocityTracker.h"
+#include "TVPTimer.h"
+#include "MacWindowBridge.h"
 #include "ScriptMgnIntf.h"
 #include "SystemControl.h"
 #include "PluginImpl.h"
@@ -25,10 +28,17 @@
 #include "OpenGLScreenSDL3.h"
 #endif
 #include <SDL3/SDL.h>
+#include <CoreText/CoreText.h>
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <set>
 #include <unistd.h>
+#include <vector>
 
 extern void TVPLoadMessage();
 
@@ -481,18 +491,18 @@ static int GetMouseButtonState()
 	return s;
 }
 
-class TVPWindowWindow : public TTVPWindowForm
+class TVPWindowWindow : public TTVPWindowForm, private TouchHandler
 {
 protected:
-	SDL_Window *window;
+	SDL_Window *window = nullptr;
 
 	TVPWindowWindow *_prevWindow;
 	TVPWindowWindow *_nextWindow;
-	SDL_Texture *texture;
-	SDL_Renderer *renderer;
-	SDL_Surface *surface;
+	SDL_Texture *texture = nullptr;
+	SDL_Renderer *renderer = nullptr;
+	SDL_Surface *surface = nullptr;
 #ifdef KRKRZ_ENABLE_CANVAS
-	SDL_GLContext context;
+	SDL_GLContext context = nullptr;
 #endif
 	tTJSNI_Window *TJSNativeInstance;
 	bool hasDrawn = false;
@@ -501,11 +511,14 @@ protected:
 	bool needsGraphicUpdate = false;
 	bool isBeingDeleted = false;
 	bool cursorTemporaryHidden = false;
-	char *imeCompositionStr;
-	size_t imeCompositionCursor;
-	size_t imeCompositionLen;
-	size_t imeCompositionSelection;
-	SDL_Rect attentionPointRect;
+	char *imeCompositionStr = nullptr;
+	size_t imeCompositionCursor = 0;
+	size_t imeCompositionLen = 0;
+	size_t imeCompositionSelection = 0;
+	SDL_Rect attentionPointRect = { 0, 0, 0, 0 };
+	bool attentionPointEnabled = false;
+	tTVPImeMode defaultImeMode = ::imClose;
+	tTVPImeMode currentImeMode = ::imClose;
 	iTJSDispatch2 *fileDropArray;
 	tjs_int fileDropArrayCount;
 	TVPSDLBitmapCompletion *bitmapCompletion;
@@ -514,7 +527,39 @@ protected:
 #endif
 	int lastMouseX;
 	int lastMouseY;
-	krkrsdl3::TouchGestureRecognizer touchGestureRecognizer;
+	VelocityTracker mouseVelocityTracker;
+	VelocityTrackers touchVelocityTrackers;
+	TouchPointList touchPoints;
+	typedef std::pair<SDL_TouchID, SDL_FingerID> TouchKey;
+	struct ActiveTouch
+	{
+		tjs_uint32 id;
+		double x;
+		double y;
+		double cx;
+		double cy;
+		tjs_uint32 tick;
+	};
+	std::map<TouchKey, ActiveTouch> activeTouches;
+	tjs_uint32 nextTouchID = 1;
+	bool enableTouch = true;
+	bool useMouseKey = false;
+	int mouseKeyXAccel = 0;
+	int mouseKeyYAccel = 0;
+	Uint64 lastMouseKeyTick = 0;
+	bool emulatedLeftButtonDown = false;
+	bool emulatedRightButtonDown = false;
+	bool gamepadMouseLeft = false;
+	bool gamepadMouseRight = false;
+	bool gamepadMouseUp = false;
+	bool gamepadMouseDown = false;
+	std::unique_ptr<TVPTimer> hintTimer;
+	tjs_int hintDelay = 500;
+	ttstr hintMessage;
+	iTJSDispatch2 *lastHintSender = nullptr;
+	SDL_Surface *maskSurface = nullptr;
+	bool maskActive = false;
+	tjs_int maskThreshold = 0;
 
 #ifdef KRKRSDL3_ENABLE_ZOOM
 	tTVPRect FullScreenDestRect;
@@ -542,6 +587,12 @@ public:
 	void TranslateDrawAreaToWindow(int &x, int &y);
 	/* Called from tTJSNI_Window */
 	virtual bool GetFormEnabled() override;
+	virtual void SetStayOnTop(bool b) override;
+	virtual bool GetStayOnTop() const override;
+	virtual void SetTrapKey(bool b) override;
+	virtual bool GetTrapKey() const override;
+	virtual void SetFocusable(bool b) override;
+	virtual bool GetFocusable() const override;
 	/* Called from tTJSNI_Window */
 	virtual void SetDefaultMouseCursor() override;
 	/* Called from tTJSNI_Window */
@@ -559,6 +610,7 @@ public:
 	virtual void SetCursorPos(tjs_int x, tjs_int y) override;
 	/* Called from tTJSNI_Window */
 	virtual void SetAttentionPoint(tjs_int left, tjs_int top, const struct tTVPFont * font) override;
+	virtual void DisableAttentionPoint() override;
 	/* Called from tTJSNI_Window */
 	virtual void BringToFront() override;
 	/* Called from tTJSNI_Window */
@@ -655,8 +707,14 @@ public:
 	virtual void OnCloseQueryCalled(bool b) override;
 	/* Called from tTJSNI_Window */
 	virtual void SetImeMode(tTVPImeMode mode) override;
+	virtual void SetDefaultImeMode(tTVPImeMode mode, bool reset) override;
+	virtual tTVPImeMode GetDefaultImeMode() const override;
 	/* Called from tTJSNI_Window */
 	virtual void ResetImeMode() override;
+	virtual void SetHintDelay(tjs_int delay) override;
+	virtual tjs_int GetHintDelay() const override;
+	virtual void SetHintText(iTJSDispatch2* sender, const ttstr &text) override;
+	void UpdateHint();
 	/* Called from tTJSNI_Window */
 	virtual void UpdateWindow(tTVPUpdateType type) override;
 	/* Called from tTJSNI_Window */
@@ -687,18 +745,51 @@ public:
 	virtual tjs_int GetInnerWidth() override;
 	/* Called from tTJSNI_Window */
 	virtual tjs_int GetInnerHeight() override;
+	virtual void SetUseMouseKey(bool b) override;
+	virtual bool GetUseMouseKey() const override;
+	virtual void ReleaseMouseCapture() override;
+	virtual void SetEnableTouch(bool b) override;
+	virtual bool GetEnableTouch() const override;
+	virtual void ResetMouseVelocity() override;
+	virtual void ResetTouchVelocity(tjs_int id) override;
+	virtual bool GetMouseVelocity(float& x, float& y, float& speed) const override;
+	virtual bool GetTouchVelocity(tjs_int id, float& x, float& y, float& speed) const override;
+	virtual void SetTouchScaleThreshold(double threshold) override;
+	virtual double GetTouchScaleThreshold() const override;
+	virtual void SetTouchRotateThreshold(double threshold) override;
+	virtual double GetTouchRotateThreshold() const override;
+	virtual tjs_real GetTouchPointStartX(tjs_int index) const override;
+	virtual tjs_real GetTouchPointStartY(tjs_int index) const override;
+	virtual tjs_real GetTouchPointX(tjs_int index) const override;
+	virtual tjs_real GetTouchPointY(tjs_int index) const override;
+	virtual tjs_int GetTouchPointID(tjs_int index) const override;
+	virtual tjs_int GetTouchPointCount() const override;
+	virtual void ZoomRectangle(tjs_int &left, tjs_int &top, tjs_int &right, tjs_int &bottom) override;
+	virtual void GetVideoOffset(tjs_int &ofsx, tjs_int &ofsy) override;
+	virtual void SetMaskRegion(tTVPBaseBitmap *bitmap, tjs_int threshold) override;
+	virtual void RemoveMaskRegion() override;
+	virtual void SetWaitVSync(bool enabled) override;
+	virtual void ResetDrawDevice() override;
+	void SyncWindowShadow();
+	void ApplySoftwareMask(const SDL_Rect &rect);
+	void ClearImeComposition();
+	void ApplyTextInputArea();
+	tjs_uint32 AllocateTouchID();
+	void HandleTouchEvent(const SDL_TouchFingerEvent &event);
+	void CancelActiveTouches(bool postEvents);
+	bool HandleMouseKey(const SDL_KeyboardEvent &event, bool down);
+	void GenerateMouseKeyMovement(bool forceLeft, bool forceRight, bool forceUp, bool forceDown);
+	void PostEmulatedMouseButton(tTVPMouseButton button, bool down, bool click = true);
+	virtual void OnTouchScaling(double startdist, double currentdist, double cx, double cy, int flag) override;
+	virtual void OnTouchRotate(double startangle, double currentangle, double distance, double cx, double cy, int flag) override;
+	virtual void OnMultiTouch() override;
 	bool should_try_parent_window(SDL_Event event);
-	void update_touch_gesture(const SDL_TouchFingerEvent &event);
-	void reset_touch_gestures();
 	void window_receive_event(SDL_Event event);
 	bool window_receive_event_input(SDL_Event event);
 };
 
-TVPWindowWindow::TVPWindowWindow(tTJSNI_Window *w)
+TVPWindowWindow::TVPWindowWindow(tTJSNI_Window *w) : touchPoints(this)
 {
-	this->window = nullptr;
-	this->imeCompositionStr = nullptr;
-	this->ResetImeMode();
 	this->fileDropArray = nullptr;
 	this->fileDropArrayCount = 0;
 	this->lastMouseX = 0;
@@ -727,7 +818,7 @@ TVPWindowWindow::TVPWindowWindow(tTJSNI_Window *w)
 
 	int new_window_w = 640;
 	int new_window_h = 480;
-	SDL_WindowFlags window_flags = 0;
+	SDL_WindowFlags window_flags = SDL_WINDOW_TRANSPARENT;
 
 #ifdef KRKRZ_ENABLE_CANVAS
 	if (!TVPIsEnableDrawDevice())
@@ -741,6 +832,7 @@ TVPWindowWindow::TVPWindowWindow(tTJSNI_Window *w)
 		SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
 		SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
 		SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+		SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
 		SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 		window_flags |= SDL_WINDOW_OPENGL;
 	}
@@ -778,12 +870,10 @@ TVPWindowWindow::TVPWindowWindow(tTJSNI_Window *w)
 		SDL_GL_MakeCurrent(this->window, this->context);
 	}
 #endif
-	this->renderer = nullptr;
 	this->bitmapCompletion = nullptr;
 #ifdef KRKRZ_ENABLE_CANVAS
 	this->openGlScreen = nullptr;
 #endif
-	this->surface = nullptr;
 #ifdef KRKRZ_ENABLE_CANVAS
 	if (TVPIsEnableDrawDevice())
 #endif
@@ -808,25 +898,25 @@ TVPWindowWindow::TVPWindowWindow(tTJSNI_Window *w)
 		{
 			TVPThrowExceptionMessage(TJS_W("Cannot get surface or renderer from SDL window"));
 		}
-		this->texture = nullptr;
 		if (this->renderer)
 		{
 			SDL_SetRenderDrawColor(this->renderer, 0x00, 0x00, 0x00, 0xFF);
-			if (!SDL_SetRenderVSync(this->renderer, 1))
-			{
-				TVPAddLog(ttstr("Cannot enable SDL renderer VSync: ") + ttstr(SDL_GetError()));
-			}
 		}
 	}
+	this->SetWaitVSync(w && w->GetWaitVSync());
+	this->SyncWindowShadow();
 	Application->AddWindow(this);
 }
 
 TVPWindowWindow::~TVPWindowWindow()
 {
-	if (this->imeCompositionStr)
+	this->hintTimer.reset();
+	this->CancelActiveTouches(false);
+	this->ClearImeComposition();
+	if (this->maskSurface)
 	{
-		SDL_free(this->imeCompositionStr);
-		this->imeCompositionStr = nullptr;
+		SDL_DestroySurface(this->maskSurface);
+		this->maskSurface = nullptr;
 	}
 	if (_lastWindowWindow == this)
 	{
@@ -958,7 +1048,18 @@ void TVPWindowWindow::TranslateWindowToDrawArea(int &x, int &y)
 	y -= this->LastSentDrawDeviceDestRect.top;
 	x = MulDiv(x, this->GetInnerWidth(), this->LastSentDrawDeviceDestRect.get_width());
 	y = MulDiv(y, this->GetInnerHeight(), this->LastSentDrawDeviceDestRect.get_height());
+	return;
 #endif
+	if(this->renderer)
+	{
+		float draw_x = static_cast<float>(x);
+		float draw_y = static_cast<float>(y);
+		if(SDL_RenderCoordinatesFromWindow(this->renderer, draw_x, draw_y, &draw_x, &draw_y))
+		{
+			x = static_cast<int>(std::lround(draw_x));
+			y = static_cast<int>(std::lround(draw_y));
+		}
+	}
 }
 
 void TVPWindowWindow::TranslateDrawAreaToWindow(int &x, int &y)
@@ -974,12 +1075,50 @@ void TVPWindowWindow::TranslateDrawAreaToWindow(int &x, int &y)
 	y = MulDiv(y, this->LastSentDrawDeviceDestRect.get_height(), this->GetInnerHeight());
 	x += this->LastSentDrawDeviceDestRect.left;
 	y += this->LastSentDrawDeviceDestRect.top;
+	return;
 #endif
+	if(this->renderer)
+	{
+		float window_x = static_cast<float>(x);
+		float window_y = static_cast<float>(y);
+		if(SDL_RenderCoordinatesToWindow(this->renderer, window_x, window_y, &window_x, &window_y))
+		{
+			x = static_cast<int>(std::lround(window_x));
+			y = static_cast<int>(std::lround(window_y));
+		}
+	}
 }
 
 bool TVPWindowWindow::GetFormEnabled()
 {
 	return this->window && !(SDL_GetWindowFlags(this->window) & SDL_WINDOW_HIDDEN);
+}
+void TVPWindowWindow::SetStayOnTop(bool b)
+{
+	if(this->window && !SDL_SetWindowAlwaysOnTop(this->window, b))
+		TVPAddLog(ttstr("Cannot change SDL always-on-top state: ") + ttstr(SDL_GetError()));
+}
+bool TVPWindowWindow::GetStayOnTop() const
+{
+	return this->window && (SDL_GetWindowFlags(this->window) & SDL_WINDOW_ALWAYS_ON_TOP) != 0;
+}
+void TVPWindowWindow::SetTrapKey(bool b)
+{
+	if(this->window && !SDL_SetWindowKeyboardGrab(this->window, b))
+		TVPAddLog(ttstr("Cannot change SDL keyboard grab: ") + ttstr(SDL_GetError()));
+}
+bool TVPWindowWindow::GetTrapKey() const
+{
+	return this->window && SDL_GetWindowKeyboardGrab(this->window);
+}
+void TVPWindowWindow::SetFocusable(bool b)
+{
+	if(this->window && !SDL_SetWindowFocusable(this->window, b))
+		TVPAddLog(ttstr("Cannot change SDL window focusability: ") + ttstr(SDL_GetError()));
+}
+bool TVPWindowWindow::GetFocusable() const
+{
+	return !this->window || (SDL_GetWindowFlags(this->window) & SDL_WINDOW_NOT_FOCUSABLE) == 0;
 }
 void TVPWindowWindow::SetDefaultMouseCursor()
 {
@@ -1073,29 +1212,9 @@ void TVPWindowWindow::GetCursorPos(tjs_int &x, tjs_int &y)
 	float mouse_x = 0.0f;
 	float mouse_y = 0.0f;
 	SDL_GetMouseState(&mouse_x, &mouse_y);
-	tjs_int new_x = static_cast<tjs_int>(mouse_x);
-	tjs_int new_y = static_cast<tjs_int>(mouse_y);
-	if (this->renderer)
-	{
-#ifdef KRKRSDL3_ENABLE_ZOOM
-		this->TranslateWindowToDrawArea(new_x, new_y);
-#else
-		float scale_x, scale_y;
-		SDL_Rect viewport;
-		int window_w, window_h;
-		int output_w, output_h;
-		SDL_GetRenderScale(this->renderer, &scale_x, &scale_y);
-		SDL_GetRenderViewport(this->renderer, &viewport);
-		SDL_GetWindowSize(this->window, &window_w, &window_h);
-		SDL_GetCurrentRenderOutputSize(this->renderer, &output_w, &output_h);
-		float dpi_scale_x = (float)window_w / output_w;
-		float dpi_scale_y = (float)window_h / output_h;
-		new_x -= (int)(viewport.x * dpi_scale_x);
-		new_y -= (int)(viewport.y * dpi_scale_y);
-		new_x = (int)(new_x / (scale_x * dpi_scale_x));
-		new_y = (int)(new_y / (scale_x * dpi_scale_y));
-#endif
-	}
+	tjs_int new_x = static_cast<tjs_int>(std::lround(mouse_x));
+	tjs_int new_y = static_cast<tjs_int>(std::lround(mouse_y));
+	this->TranslateWindowToDrawArea(new_x, new_y);
 	x = new_x;
 	y = new_y;
 }
@@ -1109,27 +1228,7 @@ void TVPWindowWindow::SetCursorPos(tjs_int x, tjs_int y)
 	tjs_int new_x = x;
 	tjs_int new_y = y;
 
-	if (this->renderer)
-	{
-#ifdef KRKRSDL3_ENABLE_ZOOM
-		this->TranslateDrawAreaToWindow(new_x, new_y);
-#else
-		float scale_x, scale_y;
-		SDL_Rect viewport;
-		int window_w, window_h;
-		int output_w, output_h;
-		SDL_GetRenderScale(this->renderer, &scale_x, &scale_y);
-		SDL_GetRenderViewport(this->renderer, &viewport);
-		SDL_GetWindowSize(this->window, &window_w, &window_h);
-		SDL_GetCurrentRenderOutputSize(this->renderer, &output_w, &output_h);
-		float dpi_scale_x = (float)window_w / output_w;
-		float dpi_scale_y = (float)window_h / output_h;
-		new_x = (int)(new_x * (scale_x * dpi_scale_x));
-		new_y = (int)(new_y * (scale_x * dpi_scale_y));
-		new_x += (int)(viewport.x * dpi_scale_x);
-		new_y += (int)(viewport.y * dpi_scale_y);
-#endif
-	}
+	this->TranslateDrawAreaToWindow(new_x, new_y);
 	SDL_WarpMouseInWindow(this->window, static_cast<float>(new_x), static_cast<float>(new_y));
 }
 void TVPWindowWindow::SetAttentionPoint(tjs_int left, tjs_int top, const struct tTVPFont *font)
@@ -1143,7 +1242,13 @@ void TVPWindowWindow::SetAttentionPoint(tjs_int left, tjs_int top, const struct 
 	this->attentionPointRect.w = 0;
 	this->attentionPointRect.h = font->Height;
 	this->TranslateDrawAreaToWindow(this->attentionPointRect.x, this->attentionPointRect.y);
-	SDL_SetTextInputArea(this->window, &this->attentionPointRect, 0);
+	this->attentionPointEnabled = true;
+	this->ApplyTextInputArea();
+}
+void TVPWindowWindow::DisableAttentionPoint()
+{
+	this->attentionPointEnabled = false;
+	this->ApplyTextInputArea();
 }
 void TVPWindowWindow::BringToFront()
 {
@@ -1225,8 +1330,10 @@ void TVPWindowWindow::SetFullScreenMode(bool fullscreen)
 #ifndef KRKRSDL3_WINDOW_SIZE_IS_LAYER_SIZE
 	if (this->window)
 	{
-		SDL_SetWindowFullscreen(this->window, fullscreen);
+		if(!SDL_SetWindowFullscreen(this->window, fullscreen))
+			TVPAddLog(ttstr("Cannot change SDL fullscreen state: ") + ttstr(SDL_GetError()));
 	}
+	this->SyncWindowShadow();
 	this->UpdateWindow(utNormal);
 #endif
 }
@@ -1243,8 +1350,11 @@ void TVPWindowWindow::SetBorderStyle(tTVPBorderStyle bs)
 #ifndef KRKRSDL3_WINDOW_SIZE_IS_LAYER_SIZE
 	if (this->window)
 	{
-		SDL_SetWindowBordered(this->window, (bs == bsNone) ? false : true);
-		SDL_SetWindowResizable(this->window, (bs == bsSizeable || bs == bsSizeToolWin) ? true : false);
+		if(!SDL_SetWindowBordered(this->window, bs != bsNone))
+			TVPAddLog(ttstr("Cannot change SDL window border: ") + ttstr(SDL_GetError()));
+		if(!SDL_SetWindowResizable(this->window, bs == bsSizeable || bs == bsSizeToolWin))
+			TVPAddLog(ttstr("Cannot change SDL window resizable state: ") + ttstr(SDL_GetError()));
+		this->SyncWindowShadow();
 	}
 #endif
 }
@@ -1632,6 +1742,8 @@ void TVPWindowWindow::TickBeat()
 		this->visibilityHasInitialized = true;
 		this->SetVisible(this->isVisible);
 	}
+	if(this->useMouseKey && this->GetWindowActive())
+		this->GenerateMouseKeyMovement(false, false, false, false);
 	if (this->needsGraphicUpdate)
 	{
 		if (this->bitmapCompletion)
@@ -1714,6 +1826,7 @@ void TVPWindowWindow::TickBeat()
 			}
 			else if (this->window && this->surface)
 			{
+				this->ApplySoftwareMask(rect);
 				SDL_UpdateWindowSurfaceRects(this->window, &rect, 1);
 				this->hasDrawn = true;
 			}
@@ -1901,19 +2014,39 @@ void TVPWindowWindow::OnCloseQueryCalled(bool b)
 }
 void TVPWindowWindow::SetImeMode(tTVPImeMode mode)
 {
-	if (!this->window || mode == ::imDisable || mode == ::imClose)
+	if(mode == ::imDontCare) return;
+	this->currentImeMode = mode;
+	if(!this->window) return;
+
+	if(mode == ::imDisable || mode == ::imClose)
 	{
-		this->ResetImeMode();
+		this->ClearImeComposition();
+		if(SDL_TextInputActive(this->window) && !SDL_StopTextInput(this->window))
+			TVPAddLog(ttstr("Cannot stop SDL text input: ") + ttstr(SDL_GetError()));
 	}
-	else if (!SDL_TextInputActive(this->window))
+	else
 	{
-		SDL_SetTextInputArea(this->window, &this->attentionPointRect, 0);
-		SDL_StartTextInput(this->window);
+		this->ApplyTextInputArea();
+		if(!SDL_TextInputActive(this->window) && !SDL_StartTextInput(this->window))
+			TVPAddLog(ttstr("Cannot start SDL text input: ") + ttstr(SDL_GetError()));
 	}
+}
+void TVPWindowWindow::SetDefaultImeMode(tTVPImeMode mode, bool reset)
+{
+	this->defaultImeMode = mode;
+	if(reset) this->ResetImeMode();
+}
+tTVPImeMode TVPWindowWindow::GetDefaultImeMode() const
+{
+	return this->defaultImeMode;
 }
 void TVPWindowWindow::ResetImeMode()
 {
-	if (this->imeCompositionStr)
+	this->SetImeMode(this->defaultImeMode);
+}
+void TVPWindowWindow::ClearImeComposition()
+{
+	if(this->imeCompositionStr)
 	{
 		SDL_free(this->imeCompositionStr);
 	}
@@ -1921,15 +2054,68 @@ void TVPWindowWindow::ResetImeMode()
 	this->imeCompositionLen = 0;
 	this->imeCompositionCursor = 0;
 	this->imeCompositionSelection = 0;
-	this->attentionPointRect.x = 0;
-	this->attentionPointRect.y = 0;
-	this->attentionPointRect.w = 0;
-	this->attentionPointRect.h = 0;
-	if (this->window && SDL_TextInputActive(this->window))
+}
+void TVPWindowWindow::ApplyTextInputArea()
+{
+	if(!this->window) return;
+	const SDL_Rect *area = this->attentionPointEnabled ? &this->attentionPointRect : nullptr;
+	if(!SDL_SetTextInputArea(this->window, area, 0))
+		TVPAddLog(ttstr("Cannot set SDL text input area: ") + ttstr(SDL_GetError()));
+}
+void TVPWindowWindow::SetHintDelay(tjs_int delay)
+{
+	this->hintDelay = delay;
+}
+tjs_int TVPWindowWindow::GetHintDelay() const
+{
+	return this->hintDelay;
+}
+void TVPWindowWindow::SetHintText(iTJSDispatch2 *sender, const ttstr &text)
+{
+	const bool update_text = this->hintMessage != text;
+	if(update_text && !text.IsEmpty())
 	{
-		SDL_SetTextInputArea(this->window, &this->attentionPointRect, 0);
-		SDL_StopTextInput(this->window);
+		this->hintMessage.Clear();
+		this->UpdateHint();
 	}
+	this->hintMessage = text;
+
+	if(text.IsEmpty())
+	{
+		if(this->hintTimer) this->hintTimer->SetEnabled(false);
+		this->UpdateHint();
+	}
+	else if(this->lastHintSender != sender || update_text)
+	{
+		if(this->hintTimer) this->hintTimer->SetEnabled(false);
+		if(this->hintDelay > 0)
+		{
+			if(!this->hintTimer)
+			{
+				this->hintTimer.reset(new TVPTimer());
+				this->hintTimer->SetOnTimerHandler(this, &TVPWindowWindow::UpdateHint);
+			}
+			this->hintTimer->SetInterval(static_cast<tjs_uint64>(this->hintDelay));
+			this->hintTimer->SetEnabled(true);
+		}
+		else if(this->hintDelay == 0)
+		{
+			this->UpdateHint();
+		}
+	}
+	this->lastHintSender = sender;
+}
+void TVPWindowWindow::UpdateHint()
+{
+	if(this->TJSNativeInstance)
+	{
+		tjs_int x = 0;
+		tjs_int y = 0;
+		this->GetCursorPos(x, y);
+		TVPPostInputEvent(new tTVPOnHintChangeInputEvent(this->TJSNativeInstance,
+			this->hintMessage, x, y, !this->hintMessage.IsEmpty()));
+	}
+	if(this->hintTimer) this->hintTimer->SetEnabled(false);
 }
 void TVPWindowWindow::UpdateWindow(tTVPUpdateType type)
 {
@@ -2204,51 +2390,488 @@ tjs_int TVPWindowWindow::GetInnerHeight()
 #endif
 }
 
-void TVPWindowWindow::reset_touch_gestures()
+void TVPWindowWindow::ZoomRectangle(tjs_int &left, tjs_int &top, tjs_int &right, tjs_int &bottom)
 {
-	this->touchGestureRecognizer.Reset();
+#ifdef KRKRSDL3_ENABLE_ZOOM
+	left = MulDiv(left, this->ActualZoomNumer, this->ActualZoomDenom);
+	top = MulDiv(top, this->ActualZoomNumer, this->ActualZoomDenom);
+	right = MulDiv(right, this->ActualZoomNumer, this->ActualZoomDenom);
+	bottom = MulDiv(bottom, this->ActualZoomNumer, this->ActualZoomDenom);
+#else
+	if(!this->renderer) return;
+	float origin_x = 0.0f;
+	float origin_y = 0.0f;
+	float left_x = static_cast<float>(left);
+	float top_y = static_cast<float>(top);
+	float right_x = static_cast<float>(right);
+	float bottom_y = static_cast<float>(bottom);
+	float ignored = 0.0f;
+	if(!SDL_RenderCoordinatesToWindow(this->renderer, 0.0f, 0.0f, &origin_x, &origin_y)) return;
+	SDL_RenderCoordinatesToWindow(this->renderer, left_x, 0.0f, &left_x, &ignored);
+	SDL_RenderCoordinatesToWindow(this->renderer, 0.0f, top_y, &ignored, &top_y);
+	SDL_RenderCoordinatesToWindow(this->renderer, right_x, 0.0f, &right_x, &ignored);
+	SDL_RenderCoordinatesToWindow(this->renderer, 0.0f, bottom_y, &ignored, &bottom_y);
+	left = static_cast<tjs_int>(std::lround(left_x - origin_x));
+	top = static_cast<tjs_int>(std::lround(top_y - origin_y));
+	right = static_cast<tjs_int>(std::lround(right_x - origin_x));
+	bottom = static_cast<tjs_int>(std::lround(bottom_y - origin_y));
+#endif
+}
+void TVPWindowWindow::GetVideoOffset(tjs_int &ofsx, tjs_int &ofsy)
+{
+	ofsx = 0;
+	ofsy = 0;
+#ifdef KRKRSDL3_ENABLE_ZOOM
+	ofsx = this->LastSentDrawDeviceDestRect.left;
+	ofsy = this->LastSentDrawDeviceDestRect.top;
+#else
+	if(this->renderer)
+	{
+		float x = 0.0f;
+		float y = 0.0f;
+		if(SDL_RenderCoordinatesToWindow(this->renderer, 0.0f, 0.0f, &x, &y))
+		{
+			ofsx = static_cast<tjs_int>(std::lround(x));
+			ofsy = static_cast<tjs_int>(std::lround(y));
+		}
+	}
+#endif
+}
+void TVPWindowWindow::SyncWindowShadow()
+{
+	const bool fullscreen = this->window && (SDL_GetWindowFlags(this->window) & SDL_WINDOW_FULLSCREEN) != 0;
+	TVPMacSetWindowShadow(this->window, !this->maskActive && !fullscreen);
+}
+void TVPWindowWindow::SetMaskRegion(tTVPBaseBitmap *bitmap, tjs_int threshold)
+{
+	if(!this->window || !bitmap) return;
+	const int width = static_cast<int>(bitmap->GetWidth());
+	const int height = static_cast<int>(bitmap->GetHeight());
+	if(width <= 0 || height <= 0) return;
+
+	SDL_Surface *shape = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_ARGB8888);
+	if(!shape)
+		TVPThrowExceptionMessage(TJS_W("Cannot create SDL window shape: %1"), ttstr(SDL_GetError()));
+	if(!SDL_LockSurface(shape))
+	{
+		SDL_DestroySurface(shape);
+		TVPThrowExceptionMessage(TJS_W("Cannot lock SDL window shape: %1"), ttstr(SDL_GetError()));
+	}
+	for(int y = 0; y < height; ++y)
+	{
+		const tjs_uint32 *source = static_cast<const tjs_uint32 *>(bitmap->GetScanLine(y));
+		Uint32 *destination = reinterpret_cast<Uint32 *>(static_cast<Uint8 *>(shape->pixels) + y * shape->pitch);
+		for(int x = 0; x < width; ++x)
+			destination[x] = static_cast<tjs_uint>(source[x] >> 24) >= static_cast<tjs_uint>(threshold)
+				? 0xffffffffU : 0x00ffffffU;
+	}
+	SDL_UnlockSurface(shape);
+	if(!SDL_SetWindowShape(this->window, shape))
+	{
+		SDL_DestroySurface(shape);
+		TVPThrowExceptionMessage(TJS_W("Cannot set SDL window shape: %1"), ttstr(SDL_GetError()));
+	}
+	if(this->maskSurface) SDL_DestroySurface(this->maskSurface);
+	this->maskSurface = shape;
+	this->maskActive = true;
+	this->maskThreshold = threshold;
+	this->SyncWindowShadow();
+	if(this->bitmapCompletion && this->surface)
+		this->bitmapCompletion->update_rect.do_union(tTVPRect(0, 0, this->surface->w, this->surface->h));
+	this->needsGraphicUpdate = true;
+}
+void TVPWindowWindow::RemoveMaskRegion()
+{
+	if(this->window && !SDL_SetWindowShape(this->window, nullptr))
+		TVPAddLog(ttstr("Cannot remove SDL window shape: ") + ttstr(SDL_GetError()));
+	if(!this->renderer && this->surface && this->maskSurface)
+	{
+		for(int y = 0; y < this->surface->h; ++y)
+		{
+			for(int x = 0; x < this->surface->w; ++x)
+			{
+				Uint8 r, g, b, a;
+				if(SDL_ReadSurfacePixel(this->surface, x, y, &r, &g, &b, &a))
+					SDL_WriteSurfacePixel(this->surface, x, y, r, g, b, SDL_ALPHA_OPAQUE);
+			}
+		}
+	}
+	if(this->maskSurface)
+	{
+		SDL_DestroySurface(this->maskSurface);
+		this->maskSurface = nullptr;
+	}
+	this->maskActive = false;
+	this->SyncWindowShadow();
+	if(this->bitmapCompletion && this->surface)
+		this->bitmapCompletion->update_rect.do_union(tTVPRect(0, 0, this->surface->w, this->surface->h));
+	this->needsGraphicUpdate = true;
+}
+void TVPWindowWindow::ApplySoftwareMask(const SDL_Rect &rect)
+{
+	if(this->renderer || !this->surface || !this->maskSurface) return;
+	const int left = std::max(0, rect.x);
+	const int top = std::max(0, rect.y);
+	const int right = std::min(this->surface->w, rect.x + rect.w);
+	const int bottom = std::min(this->surface->h, rect.y + rect.h);
+	for(int y = top; y < bottom; ++y)
+	{
+		const int mask_y = std::min(this->maskSurface->h - 1, y * this->maskSurface->h / std::max(1, this->surface->h));
+		for(int x = left; x < right; ++x)
+		{
+			const int mask_x = std::min(this->maskSurface->w - 1, x * this->maskSurface->w / std::max(1, this->surface->w));
+			Uint8 r, g, b, a, mask_alpha;
+			if(SDL_ReadSurfacePixel(this->surface, x, y, &r, &g, &b, &a) &&
+				SDL_ReadSurfacePixel(this->maskSurface, mask_x, mask_y, nullptr, nullptr, nullptr, &mask_alpha))
+				SDL_WriteSurfacePixel(this->surface, x, y, r, g, b, mask_alpha);
+		}
+	}
+}
+void TVPWindowWindow::SetWaitVSync(bool enabled)
+{
+	if(this->renderer && !SDL_SetRenderVSync(this->renderer, enabled ? 1 : 0))
+		TVPAddLog(ttstr("Cannot change SDL renderer VSync: ") + ttstr(SDL_GetError()));
+#ifdef KRKRZ_ENABLE_CANVAS
+	if(this->context && !SDL_GL_SetSwapInterval(enabled ? 1 : 0))
+		TVPAddLog(ttstr("Cannot change SDL OpenGL swap interval: ") + ttstr(SDL_GetError()));
+#endif
+}
+void TVPWindowWindow::ResetDrawDevice()
+{
+	this->needsGraphicUpdate = false;
+	this->hasDrawn = false;
+	if(this->bitmapCompletion)
+	{
+		this->bitmapCompletion->surface = nullptr;
+		this->bitmapCompletion->update_rect.clear();
+	}
+	if(this->texture)
+	{
+		SDL_DestroyTexture(this->texture);
+		this->texture = nullptr;
+	}
+	if(this->renderer && this->surface)
+	{
+		SDL_DestroySurface(this->surface);
+		this->surface = nullptr;
+	}
+	if(!this->renderer && this->window)
+	{
+		this->surface = SDL_GetWindowSurface(this->window);
+		if(this->bitmapCompletion) this->bitmapCompletion->surface = this->surface;
+	}
+
+	if(!this->TJSNativeInstance || !this->TJSNativeInstance->GetDrawDevice()) return;
+	tjs_int width = 0;
+	tjs_int height = 0;
+	this->TJSNativeInstance->GetDrawDevice()->GetSrcSize(width, height);
+	if(width <= 0 || height <= 0) return;
+	this->SetPaintBoxSize(width, height);
+	if(this->maskActive)
+	{
+		tTJSNI_BaseLayer *layer = this->TJSNativeInstance->GetDrawDevice()->GetPrimaryLayer();
+		if(layer && layer->GetMainImage()) this->SetMaskRegion(layer->GetMainImage(), this->maskThreshold);
+		else this->RemoveMaskRegion();
+	}
+	this->TJSNativeInstance->NotifyWindowExposureToLayer(tTVPRect(0, 0, width, height));
 }
 
-void TVPWindowWindow::update_touch_gesture(const SDL_TouchFingerEvent &event)
+void TVPWindowWindow::SetUseMouseKey(bool b)
 {
-	using Recognizer = krkrsdl3::TouchGestureRecognizer;
-	Recognizer::EventType type;
-	switch (event.type)
+	if(this->useMouseKey == b) return;
+	this->useMouseKey = b;
+	this->mouseKeyXAccel = 0;
+	this->mouseKeyYAccel = 0;
+	this->gamepadMouseLeft = this->gamepadMouseRight = false;
+	this->gamepadMouseUp = this->gamepadMouseDown = false;
+	this->lastMouseKeyTick = SDL_GetTicks();
+	if(!b)
 	{
-		case SDL_EVENT_FINGER_DOWN:
-			type = Recognizer::EventType::Down;
-			break;
-		case SDL_EVENT_FINGER_MOTION:
-			type = Recognizer::EventType::Motion;
-			break;
-		case SDL_EVENT_FINGER_UP:
-			type = Recognizer::EventType::Up;
-			break;
-		case SDL_EVENT_FINGER_CANCELED:
-			type = Recognizer::EventType::Canceled;
-			break;
-		default:
-			return;
+		if(this->emulatedLeftButtonDown) this->PostEmulatedMouseButton(mbLeft, false, false);
+		if(this->emulatedRightButtonDown) this->PostEmulatedMouseButton(mbRight, false, false);
 	}
-	const Recognizer::Delta delta = this->touchGestureRecognizer.Update({
-		type,
-		static_cast<Recognizer::TouchId>(event.touchID),
-		static_cast<Recognizer::FingerId>(event.fingerID),
-		event.x,
-		event.y,
-	});
-	if (!delta.valid)
+}
+bool TVPWindowWindow::GetUseMouseKey() const
+{
+	return this->useMouseKey;
+}
+void TVPWindowWindow::ReleaseMouseCapture()
+{
+	if(!SDL_CaptureMouse(false))
+		TVPAddLog(ttstr("Cannot release SDL mouse capture: ") + ttstr(SDL_GetError()));
+}
+void TVPWindowWindow::ResetMouseVelocity()
+{
+	this->mouseVelocityTracker.clear();
+}
+void TVPWindowWindow::ResetTouchVelocity(tjs_int id)
+{
+	this->touchVelocityTrackers.end(id);
+}
+bool TVPWindowWindow::GetMouseVelocity(float &x, float &y, float &speed) const
+{
+	if(this->mouseVelocityTracker.getVelocity(x, y))
 	{
+		speed = std::hypot(x, y);
+		return true;
+	}
+	x = y = speed = 0.0f;
+	return false;
+}
+bool TVPWindowWindow::GetTouchVelocity(tjs_int id, float &x, float &y, float &speed) const
+{
+	if(this->touchVelocityTrackers.getVelocity(id, x, y, speed)) return true;
+	x = y = speed = 0.0f;
+	return false;
+}
+void TVPWindowWindow::SetTouchScaleThreshold(double threshold)
+{
+	this->touchPoints.SetScaleThreshold(threshold);
+}
+double TVPWindowWindow::GetTouchScaleThreshold() const
+{
+	return this->touchPoints.GetScaleThreshold();
+}
+void TVPWindowWindow::SetTouchRotateThreshold(double threshold)
+{
+	this->touchPoints.SetRotateThreshold(threshold);
+}
+double TVPWindowWindow::GetTouchRotateThreshold() const
+{
+	return this->touchPoints.GetRotateThreshold();
+}
+tjs_real TVPWindowWindow::GetTouchPointStartX(tjs_int index) const
+{
+	return this->touchPoints.GetStartX(index);
+}
+tjs_real TVPWindowWindow::GetTouchPointStartY(tjs_int index) const
+{
+	return this->touchPoints.GetStartY(index);
+}
+tjs_real TVPWindowWindow::GetTouchPointX(tjs_int index) const
+{
+	return this->touchPoints.GetX(index);
+}
+tjs_real TVPWindowWindow::GetTouchPointY(tjs_int index) const
+{
+	return this->touchPoints.GetY(index);
+}
+tjs_int TVPWindowWindow::GetTouchPointID(tjs_int index) const
+{
+	return static_cast<tjs_int>(this->touchPoints.GetID(index));
+}
+tjs_int TVPWindowWindow::GetTouchPointCount() const
+{
+	return this->touchPoints.CountUsePoint();
+}
+void TVPWindowWindow::SetEnableTouch(bool b)
+{
+	if(this->enableTouch == b) return;
+	if(!b) this->CancelActiveTouches(true);
+	this->enableTouch = b;
+}
+bool TVPWindowWindow::GetEnableTouch() const
+{
+	return this->enableTouch;
+}
+tjs_uint32 TVPWindowWindow::AllocateTouchID()
+{
+	for(tjs_uint32 attempts = 0; attempts < static_cast<tjs_uint32>(std::numeric_limits<tjs_int>::max()); ++attempts)
+	{
+		if(this->nextTouchID == 0 || this->nextTouchID > static_cast<tjs_uint32>(std::numeric_limits<tjs_int>::max()))
+			this->nextTouchID = 1;
+		const tjs_uint32 candidate = this->nextTouchID++;
+		bool used = false;
+		for(const auto &entry : this->activeTouches)
+		{
+			if(entry.second.id == candidate)
+			{
+				used = true;
+				break;
+			}
+		}
+		if(!used) return candidate;
+	}
+	return 1;
+}
+void TVPWindowWindow::HandleTouchEvent(const SDL_TouchFingerEvent &event)
+{
+	if(!this->enableTouch || !this->window) return;
+
+	int window_width = 0;
+	int window_height = 0;
+	SDL_GetWindowSize(this->window, &window_width, &window_height);
+	tjs_int x = static_cast<tjs_int>(std::lround(event.x * window_width));
+	tjs_int y = static_cast<tjs_int>(std::lround(event.y * window_height));
+	this->TranslateWindowToDrawArea(x, y);
+	const double cx = 1.0;
+	const double cy = 1.0;
+	const tjs_uint32 tick = static_cast<tjs_uint32>(event.timestamp / 1000000ULL);
+	const TouchKey key(event.touchID, event.fingerID);
+	auto found = this->activeTouches.find(key);
+
+	if(event.type == SDL_EVENT_FINGER_DOWN)
+	{
+		if(found != this->activeTouches.end()) return;
+		ActiveTouch touch = { this->AllocateTouchID(), static_cast<double>(x), static_cast<double>(y), cx, cy, tick };
+		this->activeTouches.emplace(key, touch);
+		this->touchVelocityTrackers.start(static_cast<tjs_int>(touch.id));
+		this->touchVelocityTrackers.update(static_cast<tjs_int>(touch.id), tick, static_cast<float>(x), static_cast<float>(y));
+		if(this->TJSNativeInstance)
+			TVPPostInputEvent(new tTVPOnTouchDownInputEvent(this->TJSNativeInstance, x, y, cx, cy, touch.id));
+		this->touchPoints.TouchDown(x, y, cx, cy, touch.id, tick);
 		return;
 	}
-	if (std::fabs(delta.scale) > 0.000001f)
+	if(found == this->activeTouches.end()) return;
+
+	ActiveTouch &touch = found->second;
+	touch.x = x;
+	touch.y = y;
+	touch.tick = tick;
+	this->touchVelocityTrackers.update(static_cast<tjs_int>(touch.id), tick, static_cast<float>(x), static_cast<float>(y));
+	if(event.type == SDL_EVENT_FINGER_MOTION)
 	{
-		TVPPostInputEvent(new tTVPOnTouchScalingInputEvent(this->TJSNativeInstance, 0, delta.scale, delta.centerX, delta.centerY, 0));
+		if(this->TJSNativeInstance)
+			TVPPostInputEvent(new tTVPOnTouchMoveInputEvent(this->TJSNativeInstance, x, y, cx, cy, touch.id));
+		this->touchPoints.TouchMove(x, y, cx, cy, touch.id, tick);
 	}
-	if (std::fabs(delta.rotation) > 0.000001f)
+	else if(event.type == SDL_EVENT_FINGER_UP || event.type == SDL_EVENT_FINGER_CANCELED)
 	{
-		TVPPostInputEvent(new tTVPOnTouchRotateInputEvent(this->TJSNativeInstance, 0, delta.rotation, delta.scale, delta.centerX, delta.centerY, 0));
+		const tjs_uint32 id = touch.id;
+		if(this->TJSNativeInstance)
+			TVPPostInputEvent(new tTVPOnTouchUpInputEvent(this->TJSNativeInstance, x, y, cx, cy, id));
+		this->touchPoints.TouchUp(x, y, cx, cy, id, tick);
+		this->activeTouches.erase(found);
 	}
+}
+void TVPWindowWindow::CancelActiveTouches(bool postEvents)
+{
+	const std::map<TouchKey, ActiveTouch> touches = this->activeTouches;
+	for(const auto &entry : touches)
+	{
+		const ActiveTouch &touch = entry.second;
+		if(postEvents && this->TJSNativeInstance)
+			TVPPostInputEvent(new tTVPOnTouchUpInputEvent(this->TJSNativeInstance,
+				touch.x, touch.y, touch.cx, touch.cy, touch.id));
+		this->touchPoints.TouchUp(touch.x, touch.y, touch.cx, touch.cy, touch.id, touch.tick);
+		if(!postEvents) this->touchVelocityTrackers.end(static_cast<tjs_int>(touch.id));
+	}
+	this->activeTouches.clear();
+}
+void TVPWindowWindow::OnTouchScaling(double startdist, double currentdist, double cx, double cy, int flag)
+{
+	if(this->TJSNativeInstance)
+		TVPPostInputEvent(new tTVPOnTouchScalingInputEvent(this->TJSNativeInstance,
+			startdist, currentdist, cx, cy, flag));
+}
+void TVPWindowWindow::OnTouchRotate(double startangle, double currentangle, double distance, double cx, double cy, int flag)
+{
+	if(this->TJSNativeInstance)
+		TVPPostInputEvent(new tTVPOnTouchRotateInputEvent(this->TJSNativeInstance,
+			startangle, currentangle, distance, cx, cy, flag));
+}
+void TVPWindowWindow::OnMultiTouch()
+{
+	if(this->TJSNativeInstance)
+		TVPPostInputEvent(new tTVPOnMultiTouchInputEvent(this->TJSNativeInstance));
+}
+void TVPWindowWindow::PostEmulatedMouseButton(tTVPMouseButton button, bool down, bool click)
+{
+	tjs_int x = 0;
+	tjs_int y = 0;
+	this->GetCursorPos(x, y);
+	if(down && (x < 0 || y < 0 || x >= this->GetInnerWidth() || y >= this->GetInnerHeight())) return;
+	const tjs_uint32 state = TVP_TShiftState_To_uint32(GetShiftState()) | GetMouseButtonState();
+	this->mouseVelocityTracker.addMovement(SDL_GetTicks(), static_cast<float>(x), static_cast<float>(y));
+	if(button == mbLeft) this->emulatedLeftButtonDown = down;
+	if(button == mbRight) this->emulatedRightButtonDown = down;
+	if(!this->TJSNativeInstance) return;
+	if(down)
+	{
+		TVPPostInputEvent(new tTVPOnMouseDownInputEvent(this->TJSNativeInstance, x, y, button, state));
+	}
+	else
+	{
+		if(click && button == mbLeft)
+			TVPPostInputEvent(new tTVPOnClickInputEvent(this->TJSNativeInstance, x, y));
+		TVPPostInputEvent(new tTVPOnMouseUpInputEvent(this->TJSNativeInstance, x, y, button, state));
+	}
+}
+void TVPWindowWindow::GenerateMouseKeyMovement(bool forceLeft, bool forceRight, bool forceUp, bool forceDown)
+{
+	if(!this->useMouseKey || !this->window) return;
+	const Uint64 now = SDL_GetTicks();
+	if(!forceLeft && !forceRight && !forceUp && !forceDown && now < this->lastMouseKeyTick + 45) return;
+
+	const bool *keys = SDL_GetKeyboardState(nullptr);
+	const bool left = forceLeft || this->gamepadMouseLeft || keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_KP_4];
+	const bool right = forceRight || this->gamepadMouseRight || keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_KP_6];
+	const bool up = forceUp || this->gamepadMouseUp || keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_KP_8];
+	const bool down = forceDown || this->gamepadMouseDown || keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_KP_2];
+	const bool shift = keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
+	if(!left && !right && !up && !down)
+	{
+		this->mouseKeyXAccel = 0;
+		this->mouseKeyYAccel = 0;
+		this->lastMouseKeyTick = now;
+		return;
+	}
+	if(left && !right && this->mouseKeyXAccel > 0) this->mouseKeyXAccel = 0;
+	if(right && !left && this->mouseKeyXAccel < 0) this->mouseKeyXAccel = 0;
+	if(up && !down && this->mouseKeyYAccel > 0) this->mouseKeyYAccel = 0;
+	if(down && !up && this->mouseKeyYAccel < 0) this->mouseKeyYAccel = 0;
+
+	if(shift)
+	{
+		if(left) this->mouseKeyXAccel = -40;
+		if(right) this->mouseKeyXAccel = 40;
+		if(up) this->mouseKeyYAccel = -40;
+		if(down) this->mouseKeyYAccel = 40;
+	}
+	else
+	{
+		if(left) this->mouseKeyXAccel = std::max(-30, this->mouseKeyXAccel ? this->mouseKeyXAccel - 2 : -2);
+		else if(right) this->mouseKeyXAccel = std::min(30, this->mouseKeyXAccel ? this->mouseKeyXAccel + 2 : 2);
+		else this->mouseKeyXAccel += this->mouseKeyXAccel > 0 ? -1 : (this->mouseKeyXAccel < 0 ? 1 : 0);
+		if(up) this->mouseKeyYAccel = std::max(-30, this->mouseKeyYAccel ? this->mouseKeyYAccel - 2 : -2);
+		else if(down) this->mouseKeyYAccel = std::min(30, this->mouseKeyYAccel ? this->mouseKeyYAccel + 2 : 2);
+		else this->mouseKeyYAccel += this->mouseKeyYAccel > 0 ? -1 : (this->mouseKeyYAccel < 0 ? 1 : 0);
+	}
+
+	float x = 0.0f;
+	float y = 0.0f;
+	SDL_GetMouseState(&x, &y);
+	SDL_WarpMouseInWindow(this->window, x + (this->mouseKeyXAccel >> 1), y + (this->mouseKeyYAccel >> 1));
+	this->RestoreMouseCursor();
+	this->lastMouseKeyTick = now;
+}
+bool TVPWindowWindow::HandleMouseKey(const SDL_KeyboardEvent &event, bool down)
+{
+	if(!this->useMouseKey) return false;
+	const SDL_Keycode key = event.key;
+	if(key == SDLK_LEFT || key == SDLK_KP_4 || key == SDLK_RIGHT || key == SDLK_KP_6 ||
+		key == SDLK_UP || key == SDLK_KP_8 || key == SDLK_DOWN || key == SDLK_KP_2)
+	{
+		if(down && this->mouseKeyXAccel == 0 && this->mouseKeyYAccel == 0)
+		{
+			this->GenerateMouseKeyMovement(key == SDLK_LEFT || key == SDLK_KP_4,
+				key == SDLK_RIGHT || key == SDLK_KP_6, key == SDLK_UP || key == SDLK_KP_8,
+				key == SDLK_DOWN || key == SDLK_KP_2);
+			this->lastMouseKeyTick = SDL_GetTicks() + 100;
+		}
+		return true;
+	}
+	if(key == SDLK_RETURN || key == SDLK_SPACE || key == SDLK_KP_1)
+	{
+		if(down != this->emulatedLeftButtonDown) this->PostEmulatedMouseButton(mbLeft, down);
+		return true;
+	}
+	if(key == SDLK_ESCAPE)
+	{
+		if(down != this->emulatedRightButtonDown) this->PostEmulatedMouseButton(mbRight, down);
+		return true;
+	}
+	return false;
 }
 
 bool TVPWindowWindow::should_try_parent_window(SDL_Event event)
@@ -2457,6 +3080,8 @@ void TVPWindowWindow::window_receive_event(SDL_Event event)
 				case SDL_EVENT_WINDOW_MOUSE_LEAVE:
 				case SDL_EVENT_WINDOW_FOCUS_GAINED:
 				case SDL_EVENT_WINDOW_FOCUS_LOST:
+				case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+				case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
 				case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
 				{
 					switch (event.type)
@@ -2496,9 +3121,22 @@ void TVPWindowWindow::window_receive_event(SDL_Event event)
 						{
 							if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
 							{
-								this->reset_touch_gestures();
+								this->CancelActiveTouches(true);
+								if(this->emulatedLeftButtonDown) this->PostEmulatedMouseButton(mbLeft, false, false);
+								if(this->emulatedRightButtonDown) this->PostEmulatedMouseButton(mbRight, false, false);
+								this->gamepadMouseLeft = this->gamepadMouseRight = false;
+								this->gamepadMouseUp = this->gamepadMouseDown = false;
+								this->mouseKeyXAccel = this->mouseKeyYAccel = 0;
+								this->ReleaseMouseCapture();
+								TVPPostInputEvent(new tTVPOnReleaseCaptureInputEvent(this->TJSNativeInstance));
 							}
 							TVPPostInputEvent(new tTVPOnWindowActivateEvent(this->TJSNativeInstance, event.type == SDL_EVENT_WINDOW_FOCUS_GAINED), TVP_EPT_REMOVE_POST);
+							return;
+						}
+						case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+						case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+						{
+							this->SyncWindowShadow();
 							return;
 						}
 						case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
@@ -2556,6 +3194,8 @@ bool TVPWindowWindow::window_receive_event_input(SDL_Event event)
 					this->lastMouseX = static_cast<int>(event.motion.x);
 					this->lastMouseY = static_cast<int>(event.motion.y);
 					this->TranslateWindowToDrawArea(this->lastMouseX, this->lastMouseY);
+					this->mouseVelocityTracker.addMovement(event.motion.timestamp / 1000000ULL,
+						static_cast<float>(this->lastMouseX), static_cast<float>(this->lastMouseY));
 					TVPPostInputEvent(new tTVPOnMouseMoveInputEvent(this->TJSNativeInstance, this->lastMouseX, this->lastMouseY, s));
 					return true;
 				}
@@ -2594,10 +3234,14 @@ bool TVPWindowWindow::window_receive_event_input(SDL_Event event)
 						this->lastMouseX = static_cast<int>(event.button.x);
 						this->lastMouseY = static_cast<int>(event.button.y);
 						this->TranslateWindowToDrawArea(this->lastMouseX, this->lastMouseY);
+						this->mouseVelocityTracker.addMovement(event.button.timestamp / 1000000ULL,
+							static_cast<float>(this->lastMouseX), static_cast<float>(this->lastMouseY));
 						TVPPostInputEvent(new tTVPOnMouseMoveInputEvent(this->TJSNativeInstance, this->lastMouseX, this->lastMouseY, s));
 						switch (event.type)
 						{
 							case SDL_EVENT_MOUSE_BUTTON_DOWN:
+								if(!SDL_CaptureMouse(true))
+									TVPAddLog(ttstr("Cannot enable SDL mouse capture: ") + ttstr(SDL_GetError()));
 								TVPPostInputEvent(new tTVPOnMouseDownInputEvent(this->TJSNativeInstance, this->lastMouseX, this->lastMouseY, btn, s));
 								break;
 							case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -2610,6 +3254,11 @@ bool TVPWindowWindow::window_receive_event_input(SDL_Event event)
 									TVPPostInputEvent(new tTVPOnClickInputEvent(this->TJSNativeInstance, this->lastMouseX, this->lastMouseY));
 								}
 								TVPPostInputEvent(new tTVPOnMouseUpInputEvent(this->TJSNativeInstance, this->lastMouseX, this->lastMouseY, btn, s));
+								{
+									float unused_x = 0.0f;
+									float unused_y = 0.0f;
+									if(SDL_GetMouseState(&unused_x, &unused_y) == 0) this->ReleaseMouseCapture();
+								}
 								break;
 						}
 						return true;
@@ -2618,31 +3267,15 @@ bool TVPWindowWindow::window_receive_event_input(SDL_Event event)
 				}
 				case SDL_EVENT_MOUSE_WHEEL:
 				{
-					this->TranslateWindowToDrawArea(this->lastMouseX, this->lastMouseY);
 					TVPPostInputEvent(new tTVPOnMouseWheelInputEvent(this->TJSNativeInstance, static_cast<int>(event.wheel.x), static_cast<int>(event.wheel.y), this->lastMouseX, this->lastMouseY));
 					return true;
 				}
 				case SDL_EVENT_FINGER_MOTION:
-				{
-					TVPPostInputEvent(new tTVPOnTouchMoveInputEvent(this->TJSNativeInstance, event.tfinger.x, event.tfinger.y, 1, 1, event.tfinger.fingerID));
-					this->update_touch_gesture(event.tfinger);
-					return true;
-				}
 				case SDL_EVENT_FINGER_DOWN:
 				case SDL_EVENT_FINGER_UP:
 				case SDL_EVENT_FINGER_CANCELED:
 				{
-					switch (event.type)
-					{
-						case SDL_EVENT_FINGER_DOWN:
-							TVPPostInputEvent(new tTVPOnTouchDownInputEvent(this->TJSNativeInstance, event.tfinger.x, event.tfinger.y, 1, 1, event.tfinger.fingerID));
-							break;
-						case SDL_EVENT_FINGER_UP:
-						case SDL_EVENT_FINGER_CANCELED:
-							TVPPostInputEvent(new tTVPOnTouchUpInputEvent(this->TJSNativeInstance, event.tfinger.x, event.tfinger.y, 1, 1, event.tfinger.fingerID));
-							break;
-					}
-					this->update_touch_gesture(event.tfinger);
+					this->HandleTouchEvent(event.tfinger);
 					return true;
 				}
 				case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
@@ -2653,6 +3286,30 @@ bool TVPWindowWindow::window_receive_event_input(SDL_Event event)
 					if (!key)
 					{
 						return false;
+					}
+					if(this->useMouseKey)
+					{
+						const bool down = event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+						switch(key)
+						{
+							case VK_PADLEFT: this->gamepadMouseLeft = down; break;
+							case VK_PADRIGHT: this->gamepadMouseRight = down; break;
+							case VK_PADUP: this->gamepadMouseUp = down; break;
+							case VK_PADDOWN: this->gamepadMouseDown = down; break;
+							case VK_PAD1:
+								if(down != this->emulatedLeftButtonDown) this->PostEmulatedMouseButton(mbLeft, down);
+								return true;
+							case VK_PAD2:
+								if(down != this->emulatedRightButtonDown) this->PostEmulatedMouseButton(mbRight, down);
+								return true;
+							default: break;
+						}
+						if(key == VK_PADLEFT || key == VK_PADRIGHT || key == VK_PADUP || key == VK_PADDOWN)
+						{
+							if(down) this->GenerateMouseKeyMovement(key == VK_PADLEFT, key == VK_PADRIGHT,
+								key == VK_PADUP, key == VK_PADDOWN);
+							return true;
+						}
 					}
 					if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
 					{
@@ -2670,6 +3327,7 @@ bool TVPWindowWindow::window_receive_event_input(SDL_Event event)
 				}
 				case SDL_EVENT_KEY_DOWN:
 				{
+					if(this->HandleMouseKey(event.key, true)) return true;
 					if (SDL_TextInputActive(this->window))
 					{
 						if (this->imeCompositionStr)
@@ -2702,11 +3360,12 @@ bool TVPWindowWindow::window_receive_event_input(SDL_Event event)
 					{
 						TVPPostInputEvent(new tTVPOnKeyDownInputEvent(this->TJSNativeInstance, unified_vk_key, s));
 					}
-					SDL_SetTextInputArea(this->window, &this->attentionPointRect, 0);
+					this->ApplyTextInputArea();
 					return true;
 				}
 				case SDL_EVENT_KEY_UP:
 				{
+					if(this->HandleMouseKey(event.key, false)) return true;
 					if (SDL_TextInputActive(this->window))
 					{
 						if (this->imeCompositionStr)
@@ -2743,7 +3402,7 @@ bool TVPWindowWindow::window_receive_event_input(SDL_Event event)
 					{
 						TVPPostInputEvent(new tTVPOnKeyUpInputEvent(this->TJSNativeInstance, unified_vk_key, s));
 					}
-					SDL_SetTextInputArea(this->window, &this->attentionPointRect, 0);
+					this->ApplyTextInputArea();
 					return true;
 				}
 				default:
@@ -2983,7 +3642,83 @@ TShiftState TVP_TShiftState_From_uint32(tjs_uint32 state)
 	return result;
 }
 
-void TVPGetAllFontList(std::vector<tjs_string>& list) {}
+extern void TVPInitializeFont();
+extern void TVPAddSystemFontToFreeType(const std::string &storage,
+	std::vector<tjs_string> *faces);
+extern void TVPGetSystemFontListFromFreeType(std::vector<tjs_string> &faces);
+
+namespace
+{
+std::mutex TVPSystemFontListMutex;
+bool TVPSystemFontListInitialized = false;
+
+bool TVPCopyFontURLPath(CFURLRef url, std::string &path)
+{
+	path.clear();
+	CFStringRef path_string = CFURLCopyFileSystemPath(url, kCFURLPOSIXPathStyle);
+	if(!path_string) return false;
+
+	const CFIndex maximum_size = CFStringGetMaximumSizeForEncoding(
+		CFStringGetLength(path_string), kCFStringEncodingUTF8);
+	if(maximum_size < 0)
+	{
+		CFRelease(path_string);
+		return false;
+	}
+
+	std::vector<char> buffer(static_cast<std::size_t>(maximum_size) + 1);
+	const bool converted = CFStringGetCString(path_string, buffer.data(),
+		static_cast<CFIndex>(buffer.size()), kCFStringEncodingUTF8);
+	CFRelease(path_string);
+	if(!converted) return false;
+
+	path.assign(buffer.data());
+	return !path.empty();
+}
+}
+
+void TVPGetAllFontList(std::vector<tjs_string>& list)
+{
+	std::lock_guard<std::mutex> lock(TVPSystemFontListMutex);
+	TVPInitializeFont();
+
+	if(!TVPSystemFontListInitialized)
+	{
+		CFArrayRef font_urls = CTFontManagerCopyAvailableFontURLs();
+		if(!font_urls)
+		{
+			TVPAddLog(TJS_W("Could not enumerate macOS system fonts"));
+			TVPGetSystemFontListFromFreeType(list);
+			return;
+		}
+
+		std::set<std::string> registered_paths;
+		try
+		{
+			const CFIndex count = CFArrayGetCount(font_urls);
+			for(CFIndex i = 0; i < count; ++i)
+			{
+				CFTypeRef value = CFArrayGetValueAtIndex(font_urls, i);
+				if(!value || CFGetTypeID(value) != CFURLGetTypeID()) continue;
+
+				std::string path;
+				if(!TVPCopyFontURLPath(static_cast<CFURLRef>(value), path)) continue;
+				if(!registered_paths.insert(path).second) continue;
+
+				TVPAddSystemFontToFreeType(path, nullptr);
+			}
+		}
+		catch(...)
+		{
+			CFRelease(font_urls);
+			throw;
+		}
+		CFRelease(font_urls);
+		TVPSystemFontListInitialized = true;
+	}
+
+	TVPGetSystemFontListFromFreeType(list);
+}
 
 const tjs_char *TVPGetDefaultFontName()
 {

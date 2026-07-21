@@ -59,7 +59,6 @@ tjs_int TVPGetCursor(const ttstr & name)
 //---------------------------------------------------------------------------
 tTJSNI_Window::tTJSNI_Window()
 {
-	//TVPEnsureVSyncTimingThread();
 	Form = NULL;
 }
 //---------------------------------------------------------------------------
@@ -259,6 +258,7 @@ void TJS_INTF_METHOD tTJSNI_Window::SetCursorPos(tjs_int x, tjs_int y)
 //---------------------------------------------------------------------------
 void TJS_INTF_METHOD tTJSNI_Window::WindowReleaseCapture()
 {
+	if(Form) Form->ReleaseMouseCapture();
 }
 //---------------------------------------------------------------------------
 void TJS_INTF_METHOD tTJSNI_Window::SetHintText(iTJSDispatch2* sender, const ttstr & text)
@@ -305,10 +305,8 @@ void TJS_INTF_METHOD tTJSNI_Window::SetImeMode(tTVPImeMode mode)
 void tTJSNI_Window::SetDefaultImeMode(tTVPImeMode mode)
 {
 	// set default ime mode
-	if(Form)
-	{
-//		Form->SetDefaultImeMode(mode, LayerManager->GetFocusedLayer() == NULL);
-	}
+	if(Form) Form->SetDefaultImeMode(mode,
+		!DrawDevice || DrawDevice->GetFocusedLayer() == NULL);
 }
 //---------------------------------------------------------------------------
 tTVPImeMode tTJSNI_Window::GetDefaultImeMode() const
@@ -374,10 +372,7 @@ void tTJSNI_Window::ReadjustVideoRect()
 //---------------------------------------------------------------------------
 void tTJSNI_Window::WindowMoved()
 {
-	// inform video overlays that the window has moved.
-	// video overlays typically owns Direct3D surface which is not a part of
-	// normal window systems and does not matter where the owner window is.
-	// so we must inform window moving to overlay window.
+	// Inform video overlays that the owner window has moved.
 
 	tObjectListSafeLockHolder<tTJSNI_BaseVideoOverlay> holder(VideoOverlay);
 	tjs_int count = VideoOverlay.GetSafeLockedObjectCount();
@@ -403,12 +398,6 @@ void tTJSNI_Window::DetachVideoOverlay()
 		if(!item) continue;
 		item->DetachVideoOverlay();
 	}
-}
-//---------------------------------------------------------------------------
-//---------------------------------------------------------------------------
-void tTJSNI_Window::RegisterWindowMessageReceiver(tTVPWMRRegMode mode,
-		void * proc, const void *userdata)
-{
 }
 //---------------------------------------------------------------------------
 void tTJSNI_Window::Close()
@@ -744,6 +733,9 @@ void tTJSNI_Window::SetMaskRegion(tjs_int threshold)
 	if(!DrawDevice) TVPThrowExceptionMessage(TVPWindowHasNoLayer);
 	tTJSNI_BaseLayer *lay = DrawDevice->GetPrimaryLayer();
 	if(!lay) TVPThrowExceptionMessage(TVPWindowHasNoLayer);
+	tTVPBaseBitmap *bitmap = lay->GetMainImage();
+	if(!bitmap) TVPThrowExceptionMessage(TVPWindowHasNoLayer);
+	Form->SetMaskRegion(bitmap, threshold);
 }
 //---------------------------------------------------------------------------
 void tTJSNI_Window::RemoveMaskRegion()
@@ -909,12 +901,14 @@ int tTJSNI_Window::GetDisplayRotate()
 //---------------------------------------------------------------------------
 bool tTJSNI_Window::WaitForVBlank( tjs_int* in_vblank, tjs_int* delayed )
 {
-	if( DrawDevice ) return DrawDevice->WaitForVBlank( in_vblank, delayed );
+	if(in_vblank) *in_vblank = 0;
+	if(delayed) *delayed = 0;
 	return false;
 }
 //---------------------------------------------------------------------------
 void tTJSNI_Window::UpdateVSyncThread()
 {
+	if(Form) Form->SetWaitVSync(WaitVSync);
 }
 //---------------------------------------------------------------------------
 void TJS_INTF_METHOD tTJSNI_Window::StartBitmapCompletion(iTVPLayerManager * manager)

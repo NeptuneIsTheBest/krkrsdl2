@@ -19,7 +19,8 @@
 #include "ComplexRect.h"
 #include "WindowImpl.h"
 #include "SystemControl.h"
-#include "DInputMgn.h"
+#include "SDLApplication.h"
+#include "CharacterSet.h"
 
 #include "Application.h"
 #include "TVPScreen.h"
@@ -27,6 +28,16 @@
 #include "VirtualKey.h"
 #include "ScriptMgnIntf.h"
 #include "tjsArray.h"
+#include "md5.h"
+
+#include <climits>
+#include <fcntl.h>
+#include <mutex>
+#include <string>
+#include <sys/file.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <vector>
 
 //---------------------------------------------------------------------------
 #ifdef KRKRZ_ENABLE_CANVAS
@@ -37,6 +48,63 @@ static ttstr TVPAppTitle;
 static bool TVPAppTitleInit = false;
 // The following is defined in MsgIntf.cpp
 extern ttstr TVPGetLicenseString();
+//---------------------------------------------------------------------------
+
+namespace
+{
+std::mutex TVPAppLockMutex;
+std::vector<int> TVPAppLockDescriptors;
+
+bool TVPBuildAppLockPath(const ttstr &lockname, std::string &path)
+{
+	std::string lockname_utf8;
+	if(!TVPUtf16ToUtf8(lockname_utf8, lockname.AsStdString())) return false;
+
+	md5_state_t state;
+	md5_byte_t digest[16];
+	md5_init(&state);
+
+	const md5_byte_t *data = reinterpret_cast<const md5_byte_t *>(lockname_utf8.data());
+	std::size_t remaining = lockname_utf8.size();
+	while(remaining > 0)
+	{
+		const int chunk = remaining > static_cast<std::size_t>(INT_MAX)
+			? INT_MAX : static_cast<int>(remaining);
+		md5_append(&state, data, chunk);
+		data += chunk;
+		remaining -= static_cast<std::size_t>(chunk);
+	}
+	md5_finish(&state, digest);
+
+	static const char HexDigits[] = "0123456789abcdef";
+	char digest_text[33];
+	for(std::size_t i = 0; i < sizeof(digest); ++i)
+	{
+		digest_text[i * 2] = HexDigits[digest[i] >> 4];
+		digest_text[i * 2 + 1] = HexDigits[digest[i] & 0x0f];
+	}
+	digest_text[32] = '\0';
+
+	std::string directory;
+	const std::size_t directory_size = confstr(_CS_DARWIN_USER_TEMP_DIR, nullptr, 0);
+	if(directory_size > 0)
+	{
+		std::vector<char> buffer(directory_size);
+		if(confstr(_CS_DARWIN_USER_TEMP_DIR, buffer.data(), buffer.size()) > 0)
+		{
+			directory.assign(buffer.data());
+		}
+	}
+	if(directory.empty()) directory = "/tmp/";
+	if(directory[directory.size() - 1] != '/') directory += '/';
+
+	path = directory + "krkrsdl3-app-lock-" +
+		std::to_string(static_cast<unsigned long long>(geteuid())) + "-" +
+		digest_text + ".lock";
+	return true;
+}
+}
+
 //---------------------------------------------------------------------------
 
 
@@ -73,7 +141,7 @@ bool TVPGetAsyncKeyState(tjs_uint keycode, bool getcurrent)
 
 	if(keycode >= VK_PAD_FIRST  && keycode <= VK_PAD_LAST)
 	{
-		// JoyPad related keys are treated in DInputMgn.cpp
+		// JoyPad related keys are handled by the SDL input backend.
 		return TVPGetJoyPadAsyncState(keycode, getcurrent);
 	}
 
@@ -185,10 +253,41 @@ ttstr TVPGetSavedGamesPath()
 //---------------------------------------------------------------------------
 bool TVPCreateAppLock(const ttstr &lockname)
 {
+	std::lock_guard<std::mutex> lock(TVPAppLockMutex);
 
-	// No need to release the mutex object because the mutex is automatically
-	// released when the calling thread exits.
+	std::string path;
+	if(!TVPBuildAppLockPath(lockname, path)) return false;
 
+	const int descriptor = open(path.c_str(),
+		O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, S_IRUSR | S_IWUSR);
+	if(descriptor < 0) return false;
+
+	struct stat information;
+	if(fstat(descriptor, &information) != 0 ||
+		!S_ISREG(information.st_mode) || information.st_uid != geteuid())
+	{
+		close(descriptor);
+		return false;
+	}
+
+	if(flock(descriptor, LOCK_EX | LOCK_NB) != 0)
+	{
+		close(descriptor);
+		return false;
+	}
+
+	try
+	{
+		TVPAppLockDescriptors.push_back(descriptor);
+	}
+	catch(...)
+	{
+		close(descriptor);
+		return false;
+	}
+
+	// Keep the descriptor open for the process lifetime. The kernel releases
+	// the lock on exit, including abnormal termination.
 	return true;
 }
 //---------------------------------------------------------------------------
@@ -431,7 +530,6 @@ TJS_END_NATIVE_STATIC_METHOD_DECL_OUTER(/*object to register*/cls,
 TJS_BEGIN_NATIVE_METHOD_DECL(/*func. name*/createAppLock)
 {
 	if(numparams < 1) return TJS_E_BADPARAMCOUNT;
-	if(!result) return TJS_S_OK;
 
 	ttstr lockname = *param[0];
 

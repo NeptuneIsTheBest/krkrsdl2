@@ -50,7 +50,7 @@ if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
 	set(CMAKE_POLICY_VERSION_MINIMUM 3.16)
 endif()
 
-project(krkrsdl3 LANGUAGES C CXX)
+project(krkrsdl3 LANGUAGES C CXX OBJCXX)
 
 if(NOT APPLE OR NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 	message(FATAL_ERROR "Kirikiri SDL3 only supports macOS.")
@@ -120,6 +120,10 @@ set_source_files_properties(${KRKRSDL3_LEGACY_TARGET_OS_MAC_SRC}
 		COMPILE_OPTIONS "-UTARGET_OS_MAC;-include;${CMAKE_CURRENT_SOURCE_DIR}/src/config/LegacyMacOSCompatibility.h"
 		SKIP_PRECOMPILE_HEADERS ON
 )
+
+# Objective-C++ imports AppKit directly and cannot consume the C++ PCH.
+set_source_files_properties(src/core/sdl3/MacWindowBridge.mm PROPERTIES
+	SKIP_PRECOMPILE_HEADERS ON)
 
 set(KRKRSDL3OPUS_SRC ${KRKRSDL3COMMON_SRC})
 list(FILTER KRKRSDL3OPUS_SRC INCLUDE REGEX "^external/krkrz/external/opus")
@@ -228,11 +232,14 @@ function(krkrsdl3_configure_target target)
 		C_STANDARD_REQUIRED YES
 		CXX_STANDARD 14
 		CXX_STANDARD_REQUIRED YES
+		OBJCXX_STANDARD 14
+		OBJCXX_STANDARD_REQUIRED YES
 	)
 	target_compile_definitions(${target} PUBLIC ${KRKRSDL3_DEFINITIONS})
 	target_compile_options(${target} PUBLIC
 		$<$<COMPILE_LANGUAGE:C>:${KRKRSDL3_CFLAGS}>
 		$<$<COMPILE_LANGUAGE:CXX>:${KRKRSDL3_CXXFLAGS}>
+		$<$<COMPILE_LANGUAGE:OBJCXX>:${KRKRSDL3_CXXFLAGS}>
 	)
 	if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.16" AND KRKRSDL3_ENABLE_PRECOMPILED_HEADERS)
 		target_precompile_headers(${target} PRIVATE
@@ -244,10 +251,14 @@ add_library(krkrsdl3common STATIC)
 target_sources(krkrsdl3common PRIVATE ${KRKRSDL3COMMON_SRC})
 target_include_directories(krkrsdl3common PUBLIC ${KRKRSDL3COMMON_INCLUDES})
 find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox REQUIRED)
+find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
+find_library(CORETEXT_FRAMEWORK CoreText REQUIRED)
 target_link_libraries(krkrsdl3common PUBLIC
 	SDL3::SDL3-static
 	FAudio-static
 	${AUDIOTOOLBOX_FRAMEWORK}
+	${APPKIT_FRAMEWORK}
+	${CORETEXT_FRAMEWORK}
 )
 krkrsdl3_configure_target(krkrsdl3common)
 

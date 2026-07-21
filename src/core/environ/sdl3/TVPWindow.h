@@ -31,6 +31,7 @@ extern TShiftState TVP_TShiftState_From_uint32(tjs_uint32 state);
 
 extern void sdl_process_events();
 class TVPSDLBitmapCompletion;
+class tTVPBaseBitmap;
 #ifdef KRKRZ_ENABLE_CANVAS
 class tTVPOpenGLScreen;
 #endif
@@ -110,45 +111,46 @@ public:
 	virtual tjs_int GetInnerWidth() = 0;
 	virtual tjs_int GetInnerHeight() = 0;
 
-	// dummy function
 	void SetVisibleFromScript(bool b) { SetVisible(b); };
-	void SetStayOnTop(bool b) {}
-	bool GetStayOnTop() { return false; }
-	void SetTrapKey(bool b) {}
-	bool GetTrapKey() const { return false; }
-	void RemoveMaskRegion() {}
-	void SetFocusable(bool b) {}
-	bool GetFocusable() const { return true; }
+	virtual void SetStayOnTop(bool b) = 0;
+	virtual bool GetStayOnTop() const = 0;
+	virtual void SetTrapKey(bool b) = 0;
+	virtual bool GetTrapKey() const = 0;
+	virtual void SetMaskRegion(tTVPBaseBitmap *bitmap, tjs_int threshold) = 0;
+	virtual void RemoveMaskRegion() = 0;
+	virtual void SetFocusable(bool b) = 0;
+	virtual bool GetFocusable() const = 0;
 	int GetDisplayRotate() { return 0; }
 	int GetDisplayOrientation() { return orientLandscape; }
-	void SetEnableTouch(bool b) {}
-	bool GetEnableTouch() const { return false; }
-	void SetHintDelay(tjs_int delay) {}
-	tjs_int GetHintDelay() const { return 500; }
-
-	// Compatibility no-ops for script-visible window APIs not implemented by SDL.
-	tTVPImeMode GetDefaultImeMode() const { return ::imDisable; };
-	void SetUseMouseKey(bool b) {};
-	bool GetUseMouseKey() const { return false; };
-	void ResetMouseVelocity() {};
-	void ResetTouchVelocity(tjs_int id) {};
-	bool GetMouseVelocity(float& x, float& y, float& speed) const { return false; };
-	void ZoomRectangle(tjs_int & left, tjs_int & top, tjs_int & right, tjs_int & bottom) {};
-	void SetHintText(iTJSDispatch2* sender, const ttstr &text) {}
-	void DisableAttentionPoint() {}
-	void GetVideoOffset(tjs_int &ofsx, tjs_int &ofsy) { ofsx = 0; ofsy = 0; }
-	void SetTouchScaleThreshold(double threshold) {}
-	double GetTouchScaleThreshold() { return 0; }
-	void SetTouchRotateThreshold(double threshold) {}
-	double GetTouchRotateThreshold() { return 0; }
-	tjs_real GetTouchPointStartX(tjs_int index) const { return 0; }
-	tjs_real GetTouchPointStartY(tjs_int index) const { return 0; }
-	tjs_real GetTouchPointX(tjs_int index) const { return 0; }
-	tjs_real GetTouchPointY(tjs_int index) const { return 0; }
-	tjs_int GetTouchPointID(tjs_int index) const { return 0; }
-	tjs_int GetTouchPointCount() const { return 0; }
-	bool GetTouchVelocity(tjs_int id, float& x, float& y, float& speed) const { return false; }
-	void ResetDrawDevice() {}
+	virtual void SetEnableTouch(bool b) = 0;
+	virtual bool GetEnableTouch() const = 0;
+	virtual void SetHintDelay(tjs_int delay) = 0;
+	virtual tjs_int GetHintDelay() const = 0;
+	virtual void SetDefaultImeMode(tTVPImeMode mode, bool reset) = 0;
+	virtual tTVPImeMode GetDefaultImeMode() const = 0;
+	virtual void SetUseMouseKey(bool b) = 0;
+	virtual bool GetUseMouseKey() const = 0;
+	virtual void ReleaseMouseCapture() = 0;
+	virtual void ResetMouseVelocity() = 0;
+	virtual void ResetTouchVelocity(tjs_int id) = 0;
+	virtual bool GetMouseVelocity(float& x, float& y, float& speed) const = 0;
+	virtual void ZoomRectangle(tjs_int & left, tjs_int & top, tjs_int & right, tjs_int & bottom) = 0;
+	virtual void SetHintText(iTJSDispatch2* sender, const ttstr &text) = 0;
+	virtual void DisableAttentionPoint() = 0;
+	virtual void GetVideoOffset(tjs_int &ofsx, tjs_int &ofsy) = 0;
+	virtual void SetTouchScaleThreshold(double threshold) = 0;
+	virtual double GetTouchScaleThreshold() const = 0;
+	virtual void SetTouchRotateThreshold(double threshold) = 0;
+	virtual double GetTouchRotateThreshold() const = 0;
+	virtual tjs_real GetTouchPointStartX(tjs_int index) const = 0;
+	virtual tjs_real GetTouchPointStartY(tjs_int index) const = 0;
+	virtual tjs_real GetTouchPointX(tjs_int index) const = 0;
+	virtual tjs_real GetTouchPointY(tjs_int index) const = 0;
+	virtual tjs_int GetTouchPointID(tjs_int index) const = 0;
+	virtual tjs_int GetTouchPointCount() const = 0;
+	virtual bool GetTouchVelocity(tjs_int id, float& x, float& y, float& speed) const = 0;
+	virtual void SetWaitVSync(bool enabled) = 0;
+	virtual void ResetDrawDevice() = 0;
 #ifdef USE_OBSOLETE_FUNCTIONS
 	void SetInnerSunken(bool b) {}
 	bool GetInnerSunken() const { return false; }

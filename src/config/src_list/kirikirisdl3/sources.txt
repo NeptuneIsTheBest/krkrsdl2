@@ -66,6 +66,7 @@ external/krkrz/tjs2/tjsVariant.cpp
 external/krkrz/tjs2/tjsVariantString.cpp
 external/krkrz/tjs2/tjsdate.tab.cpp
 external/krkrz/tjs2/tjspp.tab.cpp
+external/krkrz/environ/TouchPoint.cpp
 external/krkrz/utils/ClipboardIntf.cpp
 external/krkrz/utils/DebugIntf.cpp
 external/krkrz/utils/MiscUtility.cpp
@@ -431,7 +432,6 @@ external/krkrz/external/opusfile/src/info.c
 external/krkrz/external/opusfile/src/internal.c
 external/krkrz/external/opusfile/src/opusfile.c
 external/krkrz/external/opusfile/src/stream.c
-external/krkrz/external/opusfile/src/wincerts.c
 external/zlib/adler32.c
 external/zlib/compress.c
 external/zlib/crc32.c
@@ -460,7 +460,7 @@ src/core/msg/sdl3/MsgImpl.cpp
 src/core/msg/sdl3/MsgLoad.cpp
 src/core/sdl3/SDLApplication.cpp
 src/core/sdl3/SDLBitmapCompletion.cpp
-src/core/sdl3/TouchGestureRecognizer.cpp
+src/core/sdl3/MacWindowBridge.mm
 src/core/sound/sdl3/AudioDeviceCreator.cpp
 src/core/sound/sdl3/FAudioDevice.cpp
 src/core/sound/sdl3/NullAudioDevice.cpp

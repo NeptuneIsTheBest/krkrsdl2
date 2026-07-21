@@ -31,19 +31,9 @@ void tTVPOpenGLScreen::Swap() {
 	Form->Swap();
 }
 EGLint tTVPOpenGLScreen::GetSurfaceWidth() const {
-#if 0
-	int w, h;
-	Form->GetDrawableSize(w, h);
-	return w;
-#endif
 	return Form->GetWidth();
 }
 EGLint tTVPOpenGLScreen::GetSurfaceHeight() const {
-#if 0
-	int w, h;
-	Form->GetDrawableSize(w, h);
-	return h;
-#endif
 	return Form->GetHeight();
 }
 void tTVPOpenGLScreen::GetDrawableSize(EGLint &w, EGLint &h) const {

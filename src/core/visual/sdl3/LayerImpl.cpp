@@ -11,7 +11,6 @@
 #include "tjsCommHead.h"
 
 #include "LayerImpl.h"
-#include "MsgIntf.h"
 
 #include "TVPColor.h"
 
@@ -68,118 +67,6 @@ tTJSNI_Layer::Invalidate()
 	tTJSNI_BaseLayer::Invalidate();
 }
 //---------------------------------------------------------------------------
-#if 0
-#pragma pack(push, 1)
-HRGN tTJSNI_Layer::CreateMaskRgn(tjs_uint threshold)
-{
-	// create a region according with the mask value of the layer bitmap.
-	// based on  <builder-ctl@venus13.aid.kyushu-id.ac.jp> builder ML 14870
-	// Mr. Nakamura's code
-
-	struct tRegionData
-	{
-		DWORD Size, iType, Count, RgnSize;
-		RECT Bounds;
-		RECT Rects[4000];
-
-		HRGN CreateRegion()
-		{
-			XFORM Form;
-			Form.eM11 = 1; Form.eM12 = 0; Form.eM21 = 0; Form.eM22 = 1;
-			Form.eDx = 0; Form.eDy = 0;
-			RgnSize = Count * 16;
-			return ExtCreateRegion(&Form, 32 + Count * 16, (RGNDATA *)this);
-		}
-	};
-
-	int i, j, w, h;
-	int sx, ex;
-	tTVPBaseBitmap *MainImage = GetMainImage();
-	const tjs_uint32 *pRGBQ;
-	HRGN Rgn;
-	std::vector<HRGN> RgnList;
-	tRegionData Data;
-
-	if(!MainImage) TVPThrowExceptionMessage(TVPNotDrawableLayerType);
-
-	w = MainImage->GetWidth(); h = MainImage->GetHeight();
-
-	Data.Size = 32; Data.iType = RDH_RECTANGLES;
-	Data.Count = 0;
-	Data.Bounds.left = 0;
-	Data.Bounds.top = 0;
-	Data.Bounds.right = w;
-	Data.Bounds.bottom = h;
-
-	for (j = 0; j < h; j++)
-	{
-		pRGBQ = (const tjs_uint32 *)MainImage->GetScanLine(j);
-		sx = -1; /*ex = -1;*/
-
-		for (i = 0; i < w; i++)
-		{
-
-			if ( (*pRGBQ>>24) >= threshold )
-			{
-				if ( sx == -1 ) sx = i;
-			}
-			else
-			{
-				ex = i;
-				if (sx != -1 )
-				{
-					if (Data.Count == 4000)
-					{
-						Rgn = Data.CreateRegion();
-						RgnList.push_back(Rgn);
-						Data.Count = 0;
-					}
-					RECT &r = Data.Rects[Data.Count];
-					r.left = sx;
-					r.top = j;
-					r.right = ex;
-					r.bottom = j + 1;
-					Data.Count++;
-					sx = -1; /*ex = -1;*/
-				}
-			}
-			pRGBQ++;
-		}
-		if ( sx != -1)
-		{
-			if (Data.Count == 4000)
-			{
-				Rgn = Data.CreateRegion();
-				RgnList.push_back(Rgn);
-				Data.Count = 0;
-			}
-			RECT &r = Data.Rects[Data.Count];
-			r.left = sx;
-			r.top = j;
-			r.right = w;
-			r.bottom = j + 1;
-			Data.Count++;
-		}
-	}
-
-	if (Data.Count > 0)
-	{
-		Rgn = Data.CreateRegion();
-		RgnList.push_back(Rgn);
-	}
-
-	Rgn = CreateRectRgn(0, 0, 0, 0);
-	for (tjs_uint i = 0; i < RgnList.size(); i++)
-	{
-		CombineRgn(Rgn, Rgn, HRGN(RgnList[i]), RGN_OR);
-		DeleteObject(HRGN(RgnList[i]));
-	}
-
-	return Rgn;
-}
-#pragma pack(pop)
-#endif
-//---------------------------------------------------------------------------
 
 
 
@@ -204,4 +91,3 @@ tTJSNativeClass * TVPCreateNativeClass_Layer()
 	return new tTJSNC_Layer();
 }
 //---------------------------------------------------------------------------
-
