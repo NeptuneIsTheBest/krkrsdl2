@@ -1,6 +1,6 @@
 [submodule "external/krkrz"]
 	path = external/krkrz
-	url = https://github.com/krkrsdl2/krkrz.git
+	url = https://github.com/NeptuneIsTheBest/krkrz.git
 [submodule "external/simde"]
 	path = external/simde
 	url = https://github.com/simd-everywhere/simde.git
