@@ -21,24 +21,6 @@
 // window message receivers
 //---------------------------------------------------------------------------
 enum tTVPWMRRegMode { wrmRegister=0, wrmUnregister=1 };
-#ifdef _WIN32
-#pragma pack(push, 4)
-struct tTVPWindowMessage
-{
-	unsigned int Msg; // window message
-	WPARAM WParam;  // WPARAM
-	LPARAM LParam;  // LPARAM
-	LRESULT Result;  // result
-};
-#pragma pack(pop)
-typedef bool (STDCALL * tTVPWindowMessageReceiver)
-	(void *userdata, tTVPWindowMessage *Message);
-
-#define TVP_WM_DETACH (WM_USER+106)  // before re-generating the window
-#define TVP_WM_ATTACH (WM_USER+107)  // after re-generating the window
-#define TVP_WM_FULLSCREEN_CHANGING (WM_USER+108)  // before full-screen or window changing
-#define TVP_WM_FULLSCREEN_CHANGED  (WM_USER+109)  // after full-screen or window changing
-#endif
 
 
 /*]*/
@@ -48,53 +30,6 @@ typedef bool (STDCALL * tTVPWindowMessageReceiver)
 
 
 //---------------------------------------------------------------------------
-/*
-struct tTVP_devicemodeA {
-	// copy of DEVMODE, to avoid windows platform SDK version mismatch
-#pragma pack(push, 1)
-	BYTE   dmDeviceName[CCHDEVICENAME];
-	WORD dmSpecVersion;
-	WORD dmDriverVersion;
-	WORD dmSize;
-	WORD dmDriverExtra;
-	DWORD dmFields;
-	union {
-	  struct {
-		short dmOrientation;
-		short dmPaperSize;
-		short dmPaperLength;
-		short dmPaperWidth;
-	  };
-	  POINTL dmPosition;
-	};
-	short dmScale;
-	short dmCopies;
-	short dmDefaultSource;
-	short dmPrintQuality;
-	short dmColor;
-	short dmDuplex;
-	short dmYResolution;
-	short dmTTOption;
-	short dmCollate;
-	BYTE   dmFormName[CCHFORMNAME];
-	WORD   dmLogPixels;
-	DWORD  dmBitsPerPel;
-	DWORD  dmPelsWidth;
-	DWORD  dmPelsHeight;
-	union {
-		DWORD  dmDisplayFlags;
-		DWORD  dmNup;
-	};
-	DWORD  dmDisplayFrequency;
-	DWORD  dmICMMethod;
-	DWORD  dmICMIntent;
-	DWORD  dmMediaType;
-	DWORD  dmDitherType;
-	DWORD  dmReserved1;
-	DWORD  dmReserved2;
-#pragma pack(pop)
-};
-*/
 //---------------------------------------------------------------------------
 
 
@@ -112,126 +47,6 @@ extern tjs_int TVPGetCursor(const ttstr & name);
 TJS_EXP_FUNC_DEF(tjs_uint32, TVPGetCurrentShiftKeyState, ());
 
 // implement for Application
-#if defined(_WIN32)
-/* $$({"tp_stub_ppcond":"defined(_WIN32)"})$$ */
-TJS_EXP_FUNC_DEF(void, TVPRegisterAcceleratorKey, (HWND hWnd, char virt, short key, short cmd) );
-/* $$({"tp_stub_ppcond":"defined(_WIN32)"})$$ */
-TJS_EXP_FUNC_DEF(void, TVPUnregisterAcceleratorKey, (HWND hWnd, short cmd));
-/* $$({"tp_stub_ppcond":"defined(_WIN32)"})$$ */
-TJS_EXP_FUNC_DEF(void, TVPDeleteAcceleratorKeyTable, (HWND hWnd));
-#endif
-#if 0
-HWND TVPGetModalWindowOwnerHandle();
-//---------------------------------------------------------------------------
-
-
-
-
-//---------------------------------------------------------------------------
-// Color Format Detection
-//---------------------------------------------------------------------------
-extern tjs_int TVPDisplayColorFormat;
-//---------------------------------------------------------------------------
-
-
-
-
-//---------------------------------------------------------------------------
-// Screen Mode management
-//---------------------------------------------------------------------------
-
-//! @brief		Structure for monitor screen mode
-struct tTVPScreenMode
-{
-	tjs_int Width; //!< width of screen in pixel
-	tjs_int Height; //!< height of screen in pixel
-	tjs_int BitsPerPixel; //!< bits per pixel (0 = unspecified)
-
-	ttstr Dump() const
-	{
-		return
-			DumpHeightAndWidth() +
-			TJS_W(", BitsPerPixel=") + (BitsPerPixel?ttstr(BitsPerPixel):ttstr(TJS_W("unspecified")));
-	}
-
-	ttstr DumpHeightAndWidth() const
-	{
-		return
-			TJS_W("Width=") + ttstr(Width) +
-			TJS_W(", Height=") + ttstr(Height);
-	}
-
-	bool operator < (const tTVPScreenMode & rhs) const {
-		tjs_int area_this = Width * Height;
-		tjs_int area_rhs  = rhs.Width * rhs.Height;
-		if(area_this < area_rhs) return true;
-		if(area_this > area_rhs) return false;
-		if(BitsPerPixel < rhs.BitsPerPixel) return true;
-		if(BitsPerPixel > rhs.BitsPerPixel) return false;
-		return false;
-	}
-	bool operator == (const tTVPScreenMode & rhs) const {
-		return ( Width == rhs.Width && Height == rhs.Height && BitsPerPixel == rhs.BitsPerPixel );
-	}
-};
-
-//! @brief		Structure for monitor screen mode candidate
-struct tTVPScreenModeCandidate : tTVPScreenMode
-{
-	tjs_int ZoomNumer; //!< zoom ratio numer
-	tjs_int ZoomDenom; //!< zoom ratio denom
-	tjs_int RankZoomIn;
-	tjs_int RankBPP;
-	tjs_int RankZoomBeauty;
-	tjs_int RankSize; //!< candidate preference priority (lower value is higher preference)
-
-	ttstr Dump() const
-	{
-		return tTVPScreenMode::Dump() +
-			TJS_W(", ZoomNumer=") + ttstr(ZoomNumer) +
-			TJS_W(", ZoomDenom=") + ttstr(ZoomDenom) +
-			TJS_W(", RankZoomIn=") + ttstr(RankZoomIn) +
-			TJS_W(", RankBPP=") + ttstr(RankBPP) +
-			TJS_W(", RankZoomBeauty=") + ttstr(RankZoomBeauty) +
-			TJS_W(", RankSize=") + ttstr(RankSize);
-	}
-
-	bool operator < (const tTVPScreenModeCandidate & rhs) const{
-		if(RankZoomIn < rhs.RankZoomIn) return true;
-		if(RankZoomIn > rhs.RankZoomIn) return false;
-		if(RankBPP < rhs.RankBPP) return true;
-		if(RankBPP > rhs.RankBPP) return false;
-		if(RankZoomBeauty < rhs.RankZoomBeauty) return true;
-		if(RankZoomBeauty > rhs.RankZoomBeauty) return false;
-		if(RankSize < rhs.RankSize) return true;
-		if(RankSize > rhs.RankSize) return false;
-		return false;
-	}
-};
-
-struct IDirect3D9;
-extern void TVPTestDisplayMode(tjs_int w, tjs_int h, tjs_int & bpp);
-extern void TVPSwitchToFullScreen(HWND window, tjs_int w, tjs_int h, class iTVPDrawDevice* drawdevice);
-extern void TVPRecalcFullScreen( tjs_int w, tjs_int h );
-extern void TVPRevertFromFullScreen(HWND window,tjs_uint w,tjs_uint h, class iTVPDrawDevice* drawdevice);
-/* $$({"ignore":true})$$ */
-TJS_EXP_FUNC_DEF(void, TVPEnsureDirect3DObject, ());
-void TVPDumpDirect3DDriverInformation();
-extern tTVPScreenModeCandidate TVPFullScreenMode;
-/*[*/
-//---------------------------------------------------------------------------
-// Direct3D former declaration
-//---------------------------------------------------------------------------
-#ifndef DIRECT3D_VERSION
-struct IDirect3D9;
-#endif
-
-/*]*/
-/* $$({"ignore":true})$$ */
-TJS_EXP_FUNC_DEF(IDirect3D9 *,  TVPGetDirect3DObjectNoAddRef, ());
-extern void TVPMinimizeFullScreenWindowAtInactivation();
-extern void TVPRestoreFullScreenWindowAtActivation();
-#endif
 //---------------------------------------------------------------------------
 
 
@@ -310,10 +125,6 @@ public:
 
 //-- interface to VideoOverlay object
 public:
-#ifdef _WIN32
-	HWND GetSurfaceWindowHandle();
-	HWND GetWindowHandle();
-#endif
 	void GetVideoOffset(tjs_int &ofsx, tjs_int &ofsy);
 
 	void ReadjustVideoRect();
@@ -324,9 +135,6 @@ public:
 	void ZoomRectangle(
 		tjs_int & left, tjs_int & top,
 		tjs_int & right, tjs_int & bottom);
-#ifdef _WIN32
-	HWND GetWindowHandleForPlugin();
-#endif
 	void RegisterWindowMessageReceiver(tTVPWMRRegMode mode,
 		void * proc, const void *userdata);
 

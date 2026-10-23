@@ -16,10 +16,6 @@
 extern "C" float roundevenf(float v);
 #define simde_math_roundevenf(...) roundevenf(__VA_ARGS__)
 #endif
-#if defined(__vita__) || defined(__SWITCH__)
-#include <simde/simde/simde-common.h>
-#undef SIMDE_HAVE_FENV_H
-#endif
 
 // These defines are mainly for documentation purposes
 #ifndef KRKRSDL2_SIMD_RENAME_SSE

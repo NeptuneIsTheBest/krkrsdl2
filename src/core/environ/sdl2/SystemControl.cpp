@@ -71,7 +71,6 @@ void tTVPSystemControl::InvokeEvents() {
 }
 void tTVPSystemControl::CallDeliverAllEventsOnIdle() {
 	// ダミーイベントを投げてメッセージポンプを回している
-	// Android では何か
 	//Application->PostMessageToMainWindow( TVP_EV_DELIVER_EVENTS_DUMMY, 0, 0 );
 }
 
@@ -143,15 +142,6 @@ void tTVPSystemControl::DeliverEvents() {
 }
 
 void tTVPSystemControl::SystemWatchTimerTimer() {
-#if 0
-	if( TVPTerminated ) {
-		// this will ensure terminating the application.
-		// the WM_QUIT message disappears in some unknown situations...
-		// Application->PostMessageToMainWindow( TVP_EV_DELIVER_EVENTS_DUMMY, 0, 0 );
-		Application->Terminate();
-		// Application->PostMessageToMainWindow( TVP_EV_DELIVER_EVENTS_DUMMY, 0, 0 );
-	}
-#endif
 
 	// call events
 	tjs_uint32 tick = TVPGetRoughTickCount32();
@@ -161,7 +151,6 @@ void tTVPSystemControl::SystemWatchTimerTimer() {
 	TVPPushEnvironNoise(&LastShowModalWindowSentTick, sizeof(LastShowModalWindowSentTick));
 	TVPPushEnvironNoise(&MixedIdleTick, sizeof(MixedIdleTick));
 	// マウスカーソル位置を取得してノイズに加えている
-	// Android だと、加速度センサー値とかか
 	// GPS の場合は許可が必要でレーティングも上がるので好ましくない
 	//POINT pt;
 	//::GetCursorPos(&pt);

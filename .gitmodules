@@ -4,9 +4,6 @@
 [submodule "external/simde"]
 	path = external/simde
 	url = https://github.com/simd-everywhere/simde.git
-[submodule "external/meson_toolchains"]
-	path = external/meson_toolchains
-	url = https://github.com/krkrsdl2/meson_toolchains.git
 [submodule "SDL-upstream"]
 	path = external/SDL
 	url = https://github.com/libsdl-org/SDL.git

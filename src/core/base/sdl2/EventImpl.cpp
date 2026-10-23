@@ -77,23 +77,6 @@ void TVPCallDeliverAllEventsOnIdle()
 static bool TVPBreathing = false;
 void TVPBreathe()
 {
-#if 0
-	TVPEventDisabled = true; // not to call TVP events...
-	TVPBreathing = true;
-	try
-	{
-		Application->ProcessMessages(); // do Windows message pumping
-	}
-	catch(...)
-	{
-		TVPBreathing = false;
-		TVPEventDisabled = false;
-		throw;
-	}
-
-	TVPBreathing = false;
-	TVPEventDisabled = false;
-#endif
 }
 //---------------------------------------------------------------------------
 bool TVPGetBreathing()
@@ -250,7 +233,6 @@ static tjs_int TVPContinousHandlerLimitFrequency = 0;
 //---------------------------------------------------------------------------
 void TVPBeginContinuousEvent()
 {
-#if !defined(__EMSCRIPTEN__) || (defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__))
 	// read commandline options
 	static tjs_int ArgumentGeneration = 0;
 	if(ArgumentGeneration != TVPGetCommandLineArgumentGeneration())
@@ -263,7 +245,6 @@ void TVPBeginContinuousEvent()
 			TVPContinousHandlerLimitFrequency = (tjs_int)val;
 		}
 	}
-#endif
 
 #if 0
 	if(!TVPIsWaitVSync())

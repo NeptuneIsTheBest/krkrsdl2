@@ -52,17 +52,6 @@ private:
 
 	void InvalidateAll();
 
-#if 0
-	UINT GetMonitorNumber( HWND window );
-
-	bool IsTargetWindowActive() const;
-
-	bool GetDirect3D9Device();
-	HRESULT InitializeDirect3DState();
-	HRESULT DecideD3DPresentParameters();
-
-	bool CreateD3DDevice();
-#endif
 	void DestroyD3DDevice();
 
 #if 0
@@ -71,10 +60,6 @@ private:
 #endif
 
 	void TryRecreateWhenDeviceLost();
-#if 0
-	void ErrorToLog( HRESULT hr );
-	void CheckMonitorMoved();
-#endif
 
 public:
 #if 0

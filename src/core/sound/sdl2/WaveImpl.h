@@ -169,9 +169,6 @@ private:
 		tTVPWaveSegmentQueue & segments);
 
 public:
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-	static void Trigger();
-#endif
 
 public:
 	bool FillL2Buffer(bool firstwrite, bool fromdecodethread);

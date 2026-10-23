@@ -18,7 +18,6 @@
 #include "DebugIntf.h"
 #include "Random.h"
 #include "XP3Archive.h"
-#include "SusieArchive.h"
 #include "FileSelector.h"
 #include "Random.h"
 
@@ -28,26 +27,12 @@
 #include "FilePathUtil.h"
 #include "TickCount.h"
 
-#ifndef _WIN32
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
-#endif
 
-#if defined(__vita__)
-#include <psp2/io/devctl.h>
-#include <psp2/io/dirent.h>
-#include <psp2/io/fcntl.h>
-#include <psp2/io/stat.h>
-#endif
 
-#if defined(__ANDROID__)
-#include <android/log.h>
-#include <android/configuration.h>
-#include <android/asset_manager_jni.h>
-#include "AndroidAssetManager.h"
-#endif
 
 //---------------------------------------------------------------------------
 // tTVPFileMedia
@@ -63,9 +48,6 @@ public:
 	}
 	~tTVPFileMedia()
 	{
-#if defined(__ANDROID__)
-		AndroidAssetManager_Destroy_AssetManager();
-#endif
 	}
 
 	void TJS_INTF_METHOD AddRef() { RefCount ++; }
@@ -149,71 +131,19 @@ void TJS_INTF_METHOD tTVPFileMedia::GetListAt(const ttstr &_name, iTVPStorageLis
 {
 	ttstr name(_name);
 	GetLocalName(name);
-#ifdef _WIN32
-	name += TJS_W("*.*");
-
-	// perform UNICODE operation
-	WIN32_FIND_DATAW ffd;
-	HANDLE handle = ::FindFirstFile(name.c_str(), &ffd);
-	if(handle != INVALID_HANDLE_VALUE)
-	{
-		BOOL cont;
-		do
-		{
-			if(!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-			{
-				ttstr file( reinterpret_cast<tjs_char*>(ffd.cFileName) );
-				tjs_char *p = file.Independ();
-				while(*p)
-				{
-					// make all characters small
-					if(*p >= TJS_W('A') && *p <= TJS_W('Z'))
-						*p += TJS_W('a') - TJS_W('A');
-					p++;
-				}
-				lister->Add(file);
-			}
-
-			cont = ::FindNextFile(handle, &ffd);
-		} while(cont);
-		FindClose(handle);
-	}
-#else
 	tjs_string wname(name.AsStdString());
 	std::string nname;
 	if( TVPUtf16ToUtf8(nname, wname) ) {
-#if defined(__ANDROID__)
-		AAssetManager *asset_manager = AndroidAssetManager_Get_AssetManager();
-		AAssetDir* android_dr;
-#endif
-#if defined(__vita__)
-		SceUID dr;
-		if( ( dr = sceIoDopen(nname.c_str()) ) >= 0 )
-#else
 		DIR* dr;
 		if( ( dr = opendir(nname.c_str()) ) != nullptr )
-#endif
 		{
-#if defined(__vita__)
-			SceIoDirent entry;
-			while( sceIoDread( dr, &entry ) > 0 )
-#else
 			struct dirent* entry;
 			while( ( entry = readdir( dr ) ) != nullptr )
-#endif
 			{
-#if defined(__vita__)
-				if (SCE_S_ISREG(entry.d_stat.st_mode))
-#else
 				if( entry->d_type == DT_REG )
-#endif
 				{
 					tjs_char fname[256];
-#if defined(__vita__)
-					tjs_int count = TVPUtf8ToWideCharString( entry.d_name, fname );
-#else
 					tjs_int count = TVPUtf8ToWideCharString( entry->d_name, fname );
-#endif
 					fname[count] = TJS_W('\0');
 					ttstr file(fname);
 #ifdef KRKRZ_CASE_INSENSITIVE
@@ -229,91 +159,13 @@ void TJS_INTF_METHOD tTVPFileMedia::GetListAt(const ttstr &_name, iTVPStorageLis
 				}
 				// entry->d_type == DT_UNKNOWN
 			}
-#if defined(__vita__)
-			sceIoDclose( dr );
-#else
 			closedir( dr );
-#endif
 		}
-#if defined(__ANDROID__)
-		// Skip the leading slash.
-		else if ( asset_manager != NULL && nname.length() > 0 && nname[0] == '/' && (AndroidAssetManager_Check_Directory_Existent(asset_manager, nname.c_str() + 1)) && (android_dr = AAssetManager_openDir( asset_manager, nname.c_str() + 1 )) )
-		{
-			const char* filename = nullptr;
-			do {
-				filename = AAssetDir_getNextFileName( android_dr );
-				if( filename ) {
-					tjs_char fname[256];
-					tjs_int count = TVPUtf8ToWideCharString( filename, fname );
-					fname[count] = TJS_W('\0');
-					ttstr file( fname );
-#ifdef KRKRZ_CASE_INSENSITIVE
-					tjs_char *p = file.Independ();
-					while(*p) {
-						// make all characters small
-						if(*p >= TJS_W('A') && *p <= TJS_W('Z'))
-							*p += TJS_W('a') - TJS_W('A');
-						p++;
-					}
-#endif
-					lister->Add( file );
-				}
-			} while( filename );
-			AAssetDir_close( android_dr );
-		}
-#endif
 	}
-#endif
 }
 //---------------------------------------------------------------------------
 void TJS_INTF_METHOD tTVPFileMedia::GetLocallyAccessibleName(ttstr &name)
 {
-#ifdef _WIN32
-	ttstr newname;
-
-	const tjs_char *ptr = name.c_str();
-
-	if(TJS_strncmp(ptr, TJS_W("./"), 2))
-	{
-		// differs from "./",
-		// this may be a UNC file name.
-		// UNC first two chars must be "\\\\" ?
-		// AFAIK 32-bit version of Windows assumes that '/' can be used as a path
-		// delimiter. Can UNC "\\\\" be replaced by "//" though ?
-
-		newname = ttstr(TJS_W("\\\\")) + ptr;
-	}
-	else
-	{
-		ptr += 2;  // skip "./"
-		if(!*ptr) {
-			newname = TJS_W("");
-		} else {
-			tjs_char dch = *ptr;
-			// dch not in 'a'-'z', 'A'-'Z'
-			if (!(dch >= TJS_W('a') && dch <= TJS_W('z')) && !(dch >= TJS_W('A') && dch <= TJS_W('Z'))) {
-				newname = TJS_W("");
-			} else {
-				ptr++;
-				if(*ptr != TJS_W('/')) {
-					newname = TJS_W("");
-				} else {
-					newname = ttstr(dch) + TJS_W(":") + ptr;
-				}
-			}
-		}
-	}
-
-	// change path delimiter to '\\'
-    if (!newname.IsEmpty()) {
-        tjs_char *pp = newname.Independ();
-        while (*pp) {
-            if (*pp == TJS_W('/')) *pp = TJS_W('\\');
-            pp++;
-        }
-    }
-	name = newname;
-#else
 	tjs_string wname(name.AsStdString());
 	std::string nname;
 	if (!TVPUtf16ToUtf8(nname, wname))
@@ -341,9 +193,6 @@ void TJS_INTF_METHOD tTVPFileMedia::GetLocallyAccessibleName(ttstr &name)
 	name = newname;
 #endif
 
-#if defined(__ANDROID__)
-	AAssetManager *asset_manager = AndroidAssetManager_Get_AssetManager();
-#endif
 
 	std::string nnewname;
 	const char *ptr = nname.c_str();
@@ -379,9 +228,6 @@ void TJS_INTF_METHOD tTVPFileMedia::GetLocallyAccessibleName(ttstr &name)
 		}
 
 		DIR *dirp;
-#if defined(__ANDROID__)
-		AAssetDir* android_dr;
-#endif
 		struct dirent *direntp;
 		if ((path_entries != 2) || (path_entries == 2 && domain_name != "?"))
 		{
@@ -412,33 +258,9 @@ void TJS_INTF_METHOD tTVPFileMedia::GetLocallyAccessibleName(ttstr &name)
 				break;
 			}
 		}
-#if defined(__ANDROID__)
-		// Skip the leading slash.
-		else if ( asset_manager != NULL && nnewname.length() > 0 && nnewname[0] == '/' && (AndroidAssetManager_Check_Directory_Existent(asset_manager, nnewname.c_str() + 1)) && (android_dr = AAssetManager_openDir( asset_manager, nnewname.c_str() + 1 )) )
-		{
-			const char* filename = nullptr;
-			bool found = false;
-			bool is_directory = false;
-			while (found == false && (filename = AAssetDir_getNextFileName( android_dr )) != nullptr)
-			{
-				if (!SDL_strcasecmp(nwalker.c_str(), filename))
-				{
-					nnewname += filename;
-					found = true;
-					break;
-				}
-			}
-			AAssetDir_close( android_dr );
-			if (!found)
-			{
-				nnewname += ptr_cur;
-				break;
-			}
-		}
-#endif
 		else
 		{
-			if (errno == EPERM || errno == EACCES) // Most likely inside the iOS sandbox, so just append the name
+			if (errno == EPERM || errno == EACCES) // The directory cannot be listed; append the supplied name.
 			{
 				nnewname += nwalker;
 			}
@@ -469,7 +291,6 @@ void TJS_INTF_METHOD tTVPFileMedia::GetLocallyAccessibleName(ttstr &name)
 	}
 
 	name = ttstr(wnewname);
-#endif
 
 }
 //---------------------------------------------------------------------------
@@ -505,43 +326,7 @@ void TVPPreNormalizeStorageName(ttstr &name)
 	tjs_int namelen = name.GetLen();
 	if(namelen == 0) return;
 
-#if defined(__SWITCH__) || defined(__vita__)
-	// HACK for Switch and Vita: colon in filesystem causes a conflict
-	if ((TJS_strstr(name.c_str(), TJS_W("file:")) == nullptr) && (TJS_strchr(name.c_str(), TJS_W(':')) != nullptr))
-	{
-		ttstr newname(TJS_W("file://?/"));
-		newname += name;
-		name = newname;
-	}
-#endif
 
-#ifdef _WIN32
-	if(namelen >= 2)
-	{
-		if((name[0] >= TJS_W('a') && name[0]<=TJS_W('z') ||
-			name[0] >= TJS_W('A') && name[0]<=TJS_W('Z') ) &&
-			name[1] == TJS_W(':'))
-		{
-			// Windows drive:path expression
-			ttstr newname(TJS_W("file://./"));
-			newname += name[0];
-			newname += (name.c_str()+2);
-            name = newname;
-			return;
-		}
-	}
-
-	if(namelen>=3)
-	{
-		if(name[0] == TJS_W('\\') && name[1] == TJS_W('\\') ||
-			name[0] == TJS_W('/') && name[1] == TJS_W('/'))
-		{
-			// unc expression
-			name = ttstr(TJS_W("file:")) + name;
-			return;
-		}
-	}
-#else
 	if (namelen >= 1)
 	{
 		if (name[0] == TJS_W('/'))
@@ -551,7 +336,6 @@ void TVPPreNormalizeStorageName(ttstr &name)
 			return;
 		}
 	}
-#endif
 }
 //---------------------------------------------------------------------------
 
@@ -580,28 +364,10 @@ ttstr TVPGetTemporaryName()
 #if 0
 			TVPTempPath = ttstr( Application->GetCachePath()->c_str() );
 #endif
-#if defined(__SWITCH__)
-			TVPTempPath = ttstr( "sdmc:/tmp/" );
-#elif defined(__vita__)
-			TVPTempPath = ttstr( "./tmp/" );
-#elif defined(_WIN32)
-			tjs_char tmp[MAX_PATH+1];
-			::GetTempPath(MAX_PATH, tmp);
-			TVPTempPath = tmp;
-#else
 			TVPTempPath = ttstr( "/tmp/" );
-#endif
 
-#ifdef _WIN32
-			if(TVPTempPath.GetLastChar() != TJS_W('/') && TVPTempPath.GetLastChar() != TJS_W('\\')) TVPTempPath += TJS_W("\\");
-#else
 			if(TVPTempPath.GetLastChar() != TJS_W('/')) TVPTempPath += TJS_W("/");
-#endif
-#ifdef _WIN32
-			TVPProcessID = static_cast<tjs_int>( GetCurrentProcessId() );
-#else
 			TVPProcessID = static_cast<tjs_int>( getpid() );
-#endif
 			TVPTempUniqueNum = static_cast<tjs_int>( TVPGetRoughTickCount32() );
 			TVPTempPathInit = true;
 		}
@@ -630,16 +396,9 @@ ttstr TVPGetTemporaryName()
 //---------------------------------------------------------------------------
 bool TVPRemoveFile(const ttstr &name)
 {
-#ifdef _WIN32
-	return 0!=::DeleteFile(name.c_str());
-#else
 	std::string filename;
 	if( TVPUtf16ToUtf8( filename, name.AsStdString() ) ) {
-#if defined(__vita__)
-		bool res = 0 == sceIoRemove(filename.c_str());
-#else
 		bool res = 0 == remove(filename.c_str());
-#endif
 		if (res)
 		{
 			Application->SyncSavedata();
@@ -648,7 +407,6 @@ bool TVPRemoveFile(const ttstr &name)
 	} else {
 		return false;
 	}
-#endif
 }
 //---------------------------------------------------------------------------
 
@@ -659,16 +417,9 @@ bool TVPRemoveFile(const ttstr &name)
 //---------------------------------------------------------------------------
 bool TVPRemoveFolder(const ttstr &name)
 {
-#ifdef _WIN32
-	return 0!=RemoveDirectory(name.c_str());
-#else
 	std::string filename;
 	if( TVPUtf16ToUtf8( filename, name.AsStdString() ) ) {
-#if defined(__vita__)
-		bool res = 0==sceIoRmdir(filename.c_str());
-#else
 		bool res = 0==rmdir(filename.c_str());
-#endif
 		if (res)
 		{
 			Application->SyncSavedata();
@@ -677,7 +428,6 @@ bool TVPRemoveFolder(const ttstr &name)
 	} else {
 		return false;
 	}
-#endif
 }
 //---------------------------------------------------------------------------
 
@@ -721,42 +471,14 @@ tTJSBinaryStream * TVPOpenStream(const ttstr & _name, tjs_uint32 flags)
 //---------------------------------------------------------------------------
 bool TVPCheckExistentLocalFile(const ttstr &name)
 {
-#ifdef _WIN32
-	DWORD attrib = ::GetFileAttributes(name.c_str());
-	if(attrib == 0xffffffff || (attrib & FILE_ATTRIBUTE_DIRECTORY))
-		return false; // not a file
-	else
-		return true; // a file
-#else
 	std::string filename;
 	if( TVPUtf16ToUtf8( filename, name.AsStdString() ) ) {
-#if defined(__vita__)
-		SceIoStat st;
-		if( sceIoGetstat( filename.c_str(), &st) >= 0)
-			if( SCE_S_ISREG(st.st_mode) )
-#else
 		struct stat st;
 		if( stat( filename.c_str(), &st) == 0)
 			if( S_ISREG(st.st_mode) )
-#endif
 				return true;
-#if defined(__ANDROID__)
-		AAssetManager *asset_manager = AndroidAssetManager_Get_AssetManager();
-		// Skip the leading slash.
-		if (asset_manager != NULL && filename.length() > 0 && filename[0] == '/')
-		{
-			AAsset* asset = AAssetManager_open( asset_manager, filename.c_str() + 1, AASSET_MODE_UNKNOWN);
-			bool result = asset != NULL;
-			if ( result )
-			{
-				AAsset_close( asset );
-				return result;
-			}
-		}
-#endif
 	}
 	return false;
-#endif
 }
 //---------------------------------------------------------------------------
 
@@ -768,41 +490,14 @@ bool TVPCheckExistentLocalFile(const ttstr &name)
 //---------------------------------------------------------------------------
 bool TVPCheckExistentLocalFolder(const ttstr &name)
 {
-#ifdef _WIN32
-	DWORD attrib = GetFileAttributes(name.c_str());
-	if(attrib != 0xffffffff && (attrib & FILE_ATTRIBUTE_DIRECTORY))
-		return true; // a folder
-	else
-		return false; // not a folder
-#else
 	std::string filename;
 	if( TVPUtf16ToUtf8( filename, name.AsStdString() ) ) {
-#if defined(__vita__)
-		SceIoStat st;
-		if( sceIoGetstat( filename.c_str(), &st) >= 0)
-			if( SCE_S_ISDIR(st.st_mode) )
-#else
 		struct stat st;
 		if( stat( filename.c_str(), &st) == 0)
 			if( S_ISDIR(st.st_mode) )
-#endif
 				return true;
-#if defined(__ANDROID__)
-		AAssetManager *asset_manager = AndroidAssetManager_Get_AssetManager();
-		// Skip the leading slash.
-		if (asset_manager != NULL && filename.length() > 0 && filename[0] == '/')
-		{
-			AAssetDir* asset = AAssetManager_openDir( asset_manager, filename.c_str() + 1 );
-			bool result = AndroidAssetManager_Check_Directory_Existent(asset_manager, filename.c_str() + 1);
-			if ( result )
-			{
-				return result;
-			}
-		}
-#endif
 	}
 	return false;
-#endif
 }
 //---------------------------------------------------------------------------
 
@@ -815,8 +510,7 @@ bool TVPCheckExistentLocalFolder(const ttstr &name)
 //---------------------------------------------------------------------------
 tTVPArchive * TVPOpenArchive(const ttstr & name)
 {
-	tTVPArchive * archive = TVPOpenSusieArchive(name); // in SusieArchive.h
-	if(!archive) return new tTVPXP3Archive(name); else return archive;
+	return new tTVPXP3Archive(name);
 }
 //---------------------------------------------------------------------------
 
@@ -875,21 +569,12 @@ static bool _TVPCreateFolders(const ttstr &folder)
 
 	if(!_TVPCreateFolders(parent)) return false;
 
-#ifdef _WIN32
-	BOOL res = ::CreateDirectory(folder.c_str(), NULL);
-	return 0!=res;
-#else
 	std::string filename;
 	int res = -1;
 	if( TVPUtf16ToUtf8( filename, folder.AsStdString() ) ) {
-#if defined(__vita__)
-		res = sceIoMkdir( filename.c_str(), 0777 );
-#else
 		res = mkdir( filename.c_str(), 0777 );
-#endif
 	}
 	return 0 == res;
-#endif
 }
 
 bool TVPCreateFolders(const ttstr &folder)
@@ -949,17 +634,6 @@ retry:
 			if(TVPCreateFolders(TVPLocalExtractFilePath(localname)))
 				goto retry;
 		}
-#ifdef __ANDROID__
-		// Special case for Android and reading the asset filesystem from AAssetManager
-		if (trycount == 0 && access == TJS_BS_READ && filename.length() > 0 && filename[0] == '/')
-		{
-			trycount++;
-
-			// retry after removing the leading slash
-			filename.erase(0, 1);
-			goto retry;
-		}
-#endif
 		TVPThrowExceptionMessage(TVPCannotOpenStorage, origname);
 	}
 
@@ -1215,24 +889,8 @@ HRESULT STDMETHODCALLTYPE tTVPIStreamAdapter::Stat(STATSTG *pstatstg, DWORD grfS
 
 	if(pstatstg)
 	{
-#ifdef _WIN32
-		ZeroMemory(pstatstg, sizeof(*pstatstg));
-#else
 		memset(pstatstg, 0, sizeof(*pstatstg));
-#endif
 
-#ifdef _WIN32
-		// pwcsName
-		// this object's storage pointer does not have a name ...
-		if(!(grfStatFlag &  STATFLAG_NONAME))
-		{
-			// anyway returns an empty string
-			LPWSTR str = (LPWSTR)CoTaskMemAlloc(sizeof(*str));
-			if(str == NULL) return E_OUTOFMEMORY;
-			*str = TJS_W('\0');
-			pstatstg->pwcsName = str;
-		}
-#endif
 
 		// type
 		pstatstg->type = STGTY_STREAM;
@@ -1472,16 +1130,8 @@ static void TVPLocatePlugin(const ttstr &aname, ttstr &fpname, ttstr &flname)
 	{
 		// Relative path; try various ways to find the plugin
 		tjs_string cur_name = TVPExtractStorageName(aname).c_str();
-#ifdef _WIN32
-		ttstr place(TVPGetPlacedPath(cur_name));
-		if (!place.IsEmpty())
-		{
-			fpname = place;
-		}
-#endif
 		if (fpname.GetLen() == 0)
 		{
-#ifndef _WIN32
 			{
 				tjs_int len = cur_name.length();
 				if (len > 4 && cur_name[len - 1] == TJS_W('l') && cur_name[len - 2] == TJS_W('l') && cur_name[len - 3] == TJS_W('d') && cur_name[len - 4] == TJS_W('.'))
@@ -1490,7 +1140,6 @@ static void TVPLocatePlugin(const ttstr &aname, ttstr &fpname, ttstr &flname)
 					cur_name = extso;
 				}
 			}
-#endif
 			TVPInitPluginSearchPathOptions();
 			tjs_string searchpath = TVPPluginSearchPath;
 			if (!searchpath.empty())

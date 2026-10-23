@@ -59,38 +59,6 @@ enum class eTVPActiveEvent
 	onActive,
 	onDeactive,
 };
-#if 0
-class AcceleratorKey {
-	HACCEL hAccel_;
-	ACCEL* keys_;
-	int key_count_;
-
-public:
-	AcceleratorKey();
-	~AcceleratorKey();
-	void AddKey( WORD id, WORD key, BYTE virt );
-	void DelKey( WORD id );
-	HACCEL GetHandle() { return hAccel_; }
-};
-class AcceleratorKeyTable {
-	std::map<HWND,AcceleratorKey*> keys_;
-	HACCEL hAccel_;
-
-public:
-	AcceleratorKeyTable();
-	~AcceleratorKeyTable();
-	void AddKey( HWND hWnd, WORD id, WORD key, BYTE virt );
-	void DelKey( HWND hWnd, WORD id );
-	void DelTable( HWND hWnd );
-	HACCEL GetHandle(HWND hWnd) {
-		std::map<HWND,AcceleratorKey*>::iterator i = keys_.find(hWnd);
-		if( i != keys_.end() ) {
-			return i->second->GetHandle();
-		}
-		return hAccel_;
-	}
-};
-#endif
 class tTVPApplication {
 	std::vector<class TTVPWindowForm*> windows_list_;
 	tjs_string title_;
@@ -140,20 +108,6 @@ public:
 
 	bool IsTarminate() const { return tarminate_; }
 
-#ifdef _WIN32
-	HWND GetHandle();
-#endif
-#if 0
-	bool IsIconic() {
-		HWND hWnd = GetHandle();
-		if( hWnd != INVALID_HANDLE_VALUE ) {
-			return 0 != ::IsIconic(hWnd);
-		}
-		return true; // そもそもウィンドウがない
-	}
-	void Minimize();
-	void Restore();
-#endif
 	void BringToFront();
 
 	void AddWindow( class TTVPWindowForm* win ) {
@@ -191,39 +145,10 @@ public:
 		return 0;
 	}
 	void Terminate();
-#if 0
-	void SetHintHidePause( int v ) {}
-	void SetShowHint( bool b ) {}
-	void SetShowMainForm( bool b ) {}
-
-
-	HWND GetMainWindowHandle() const;
-#endif
 
 	int ArgC;
 	tjs_char ** ArgV;
 
-#if 0
-	void PostMessageToMainWindow(UINT message, WPARAM wParam, LPARAM lParam);
-
-	void ModalStarted( class tTVPWindow* form ) {
-		modal_window_stack_.push(form);
-	}
-	void ModalFinished();
-	void OnActiveAnyWindow();
-	void DisableWindows();
-	void EnableWindows( const std::vector<class TTVPWindowForm*>& win );
-	void GetDisableWindowList( std::vector<class TTVPWindowForm*>& win );
-	void GetEnableWindowList( std::vector<class TTVPWindowForm*>& win, class TTVPWindowForm* activeWindow );
-
-
-	void RegisterAcceleratorKey(HWND hWnd, char virt, short key, short cmd);
-	void UnregisterAcceleratorKey(HWND hWnd, short cmd);
-	void DeleteAcceleratorKeyTable( HWND hWnd );
-
-	void OnActivate( HWND hWnd );
-	void OnDeactivate( HWND hWnd );
-#endif
 	bool GetActivating() const { return application_activating_; }
 	bool GetNotMinimizing() const;
 
@@ -242,11 +167,6 @@ public:
 		syncfs_is_finished_ = true;
 	}
 };
-#if 0
-std::vector<std::string>* LoadLinesFromFile( const tjs_string& path );
-
-inline HINSTANCE GetHInstance() { return ((HINSTANCE)GetModuleHandle(0)); }
-#endif
 extern class tTVPApplication* Application;
 
 

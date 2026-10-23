@@ -443,7 +443,6 @@ external/zlib/inftrees.c
 external/zlib/trees.c
 external/zlib/uncompr.c
 external/zlib/zutil.c
-src/core/base/sdl2/AndroidAssetManager.c
 src/core/base/sdl2/EventImpl.cpp
 src/core/base/sdl2/FileSelector.cpp
 src/core/base/sdl2/FuncStubs.cpp
@@ -451,7 +450,6 @@ src/core/base/sdl2/NativeEventQueue.cpp
 src/core/base/sdl2/PluginImpl.cpp
 src/core/base/sdl2/ScriptMgnImpl.cpp
 src/core/base/sdl2/StorageImpl.cpp
-src/core/base/sdl2/SusieArchive.cpp
 src/core/base/sdl2/SysInitImpl.cpp
 src/core/base/sdl2/SystemImpl.cpp
 src/core/environ/sdl2/Application.cpp
